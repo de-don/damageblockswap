@@ -17,6 +17,12 @@
 	"entrypoints": {
 		"main": [
 			"com.example.DamageBlockSwap"
+		],
+		"client": [
+			"com.example.client.DamageBlockSwapClient"
+		],
+		"modmenu": [
+			"com.example.client.ModMenuIntegration"
 		]
 	},
 	"depends": {
@@ -24,5 +30,9 @@
 		"minecraft": "~26.1.2",
 		"java": ">=25",
 		"fabric-api": "*"
+	},
+	"recommends": {
+		"modmenu": "*",
+		"cloth-config": "*"
 	}
 }
