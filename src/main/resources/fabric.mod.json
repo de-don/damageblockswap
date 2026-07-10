@@ -3,13 +3,11 @@
 	"id": "damageblockswap",
 	"version": "${version}",
 	"name": "Damage Block Swap",
-	"description": "Every time a player takes damage, two random block types swap places across the entire loaded world.",
+	"description": "Every time you take damage, two random block types swap places. The rules pile up and the world descends into chaos as you explore. Includes a swap map, /dbs command, and config screen.",
 	"authors": [
 		"denis"
 	],
 	"contact": {
-		"homepage": "https://fabricmc.net/",
-		"sources": "https://github.com/FabricMC/fabric-example-mod"
 	},
 	"license": "CC0-1.0",
 	"icon": "assets/modid/icon.png",
