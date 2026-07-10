@@ -1,77 +1,257 @@
 package com.example;
 
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerChunkEvents;
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
+
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.chunk.LevelChunk;
+import net.minecraft.world.level.chunk.LevelChunkSection;
 
-import java.util.ArrayList;
-import java.util.List;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.LinkedHashSet;
+import java.util.Map;
+import java.util.UUID;
 
 /**
- * Performs the actual block swap across every loaded chunk of every loaded world.
+ * Brings chunks up to date with the swap rule book ({@link SwapTracker}), a little each tick.
  *
- * <p>We visit each position exactly once, so an in-place swap is correct: reading the
- * <em>current</em> block and turning A→B or B→A can never accidentally double-convert a
- * block, because we never come back to the same position.
+ * <p>Each chunk remembers which rule <b>version</b> it has been transformed to (a persistent
+ * attachment). When a chunk is behind — because a new swap happened, or because it just loaded
+ * for the first time / after exploring — it is added to a queue. Every tick we apply a bounded
+ * number of block changes from that queue, so the world stays consistent everywhere without ever
+ * freezing.
  */
 public final class WorldSwapService {
+	// Per-tick work limits. Changing a block (especially with physics) is the costly part.
+	private static final int CHANGES_PER_TICK_PHYSICS = 6_000;
+	private static final int CHANGES_PER_TICK_NO_PHYSICS = 40_000;
+	private static final int READS_PER_TICK = 1_000_000;
+	// Hard wall-clock cap: never spend more than this on swaps in one tick, whatever the cost.
+	private static final long MAX_NANOS_PER_TICK = 8_000_000L; // 8 ms
 
-	/** Swaps block types {@code a} and {@code b} everywhere. Returns how many blocks changed. */
-	public long swapBlocks(MinecraftServer server, Block a, Block b) {
-		long changed = 0;
-		for (ServerLevel level : server.getAllLevels()) {
-			changed += swapInLevel(level, a, b);
-		}
-		return changed;
+	/** One chunk that still needs updating. */
+	private record ChunkRef(ServerLevel level, ChunkPos pos) {
 	}
 
-	private long swapInLevel(ServerLevel level, Block a, Block b) {
-		long changed = 0;
+	// Ordered, de-duplicated set of chunks waiting to be updated.
+	private final LinkedHashSet<ChunkRef> queue = new LinkedHashSet<>();
 
-		BlockState stateA = a.defaultBlockState();
-		BlockState stateB = b.defaultBlockState();
+	// Last chunk each player was in, so we notice when they cross into a new chunk.
+	private final Map<UUID, ChunkPos> lastPlayerChunk = new HashMap<>();
 
-		int minY = level.getMinY();
-		int maxY = level.getMaxY();
+	private final BlockPos.MutableBlockPos cursorPos = new BlockPos.MutableBlockPos();
 
-		// Copy the set first: setBlock() fires neighbor updates that may load/unload
-		// chunks, which would otherwise mutate the tracked set while we iterate it.
-		List<LevelChunk> chunks = new ArrayList<>(ChunkTracker.getLoadedChunks(level));
+	// State for the chunk currently being processed (may span several ticks).
+	private ServerLevel curLevel;
+	private LevelChunk curChunk;
+	private LevelChunkSection[] curSections;
+	private Map<Block, Block> curMapping;
+	private int curTargetVersion;
+	private int curHighest;
+	private int curMinX;
+	private int curMinZ;
+	private int curMinY;
+	private int sectionIndex;
+	private int posInSection;
 
-		BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos();
+	private int budgetChanges;
+	private int budgetReads;
+	private long deadlineNanos;
 
-		for (LevelChunk chunk : chunks) {
-			ChunkPos cp = chunk.getPos();
-			int minX = cp.getMinBlockX();
-			int minZ = cp.getMinBlockZ();
+	// Diagnostics: how much a still-draining morph has done, so we can log when it finishes.
+	private long changedSinceIdle;
+	private int ticksSinceIdle;
 
-			for (int dx = 0; dx < 16; dx++) {
-				for (int dz = 0; dz < 16; dz++) {
-					int x = minX + dx;
-					int z = minZ + dz;
+	public void registerEvents() {
+		ServerTickEvents.END_SERVER_TICK.register(server -> {
+			trackPlayerMovement(server); // as players cross chunks, catch up the area around them
+			pump();
+		});
+		// New terrain (or a chunk reloaded after exploring) catches up here.
+		ServerChunkEvents.CHUNK_LOAD.register((level, chunk, newlyGenerated) -> enqueueIfBehind(level, chunk));
+	}
 
-					for (int y = minY; y <= maxY; y++) {
-						pos.set(x, y, z);
-						Block current = level.getBlockState(pos).getBlock();
+	/** Refreshes the area around the player right after a hit, so the swap shows immediately. */
+	public void onHit(ServerLevel level, int centerChunkX, int centerChunkZ) {
+		refreshAround(level, centerChunkX, centerChunkZ, Config.swapRadius);
+	}
 
-						if (current == a) {
-							// Block.UPDATE_ALL lets vanilla run its physics: sand falls,
-							// water/lava flow, plants re-check support, redstone updates.
-							level.setBlock(pos, stateB, Block.UPDATE_ALL);
-							changed++;
-						} else if (current == b) {
-							level.setBlock(pos, stateA, Block.UPDATE_ALL);
-							changed++;
-						}
-					}
+	/**
+	 * When a player moves into a new chunk, re-check the chunks around them (within the configured
+	 * radius) and update any that are behind. This spreads the work naturally over movement, and the
+	 * affected "bubble" follows the player.
+	 */
+	private void trackPlayerMovement(MinecraftServer server) {
+		for (ServerPlayer player : server.getPlayerList().getPlayers()) {
+			BlockPos pos = player.blockPosition();
+			ChunkPos current = new ChunkPos(pos.getX() >> 4, pos.getZ() >> 4);
+			ChunkPos previous = lastPlayerChunk.get(player.getUUID());
+			if (!current.equals(previous)) {
+				lastPlayerChunk.put(player.getUUID(), current);
+				if (player.level() instanceof ServerLevel level) {
+					refreshAround(level, current.x(), current.z(), Config.swapRadius);
 				}
 			}
 		}
+	}
 
-		return changed;
+	private void refreshAround(ServerLevel level, int centerChunkX, int centerChunkZ, int radius) {
+		for (int dx = -radius; dx <= radius; dx++) {
+			for (int dz = -radius; dz <= radius; dz++) {
+				LevelChunk chunk = level.getChunkSource().getChunkNow(centerChunkX + dx, centerChunkZ + dz);
+				if (chunk != null) {
+					enqueueIfBehind(level, chunk);
+				}
+			}
+		}
+	}
+
+	/** Drops all pending work — called when the world closes so nothing leaks into the next one. */
+	public void reset() {
+		queue.clear();
+		lastPlayerChunk.clear();
+		curChunk = null;
+	}
+
+	/** How many chunks are waiting to be updated (for diagnostics). */
+	public int queueSize() {
+		return queue.size();
+	}
+
+	private void enqueueIfBehind(ServerLevel level, LevelChunk chunk) {
+		if (chunk.getAttachedOrElse(DamageBlockSwap.APPLIED_VERSION, 0) < SwapTracker.version()) {
+			queue.add(new ChunkRef(level, chunk.getPos()));
+		}
+	}
+
+	private void pump() {
+		if (queue.isEmpty() && curChunk == null) {
+			return; // idle
+		}
+
+		budgetChanges = Config.updateNeighbors ? CHANGES_PER_TICK_PHYSICS : CHANGES_PER_TICK_NO_PHYSICS;
+		budgetReads = READS_PER_TICK;
+		deadlineNanos = System.nanoTime() + MAX_NANOS_PER_TICK;
+		int flags = Config.updateNeighbors ? Block.UPDATE_ALL : Block.UPDATE_CLIENTS;
+		ticksSinceIdle++;
+
+		while (budgetChanges > 0 && budgetReads > 0 && System.nanoTime() < deadlineNanos) {
+			if (curChunk == null && !startNextChunk()) {
+				break; // nothing left to do
+			}
+			if (processCurrentChunk(flags)) {
+				curChunk.setAttached(DamageBlockSwap.APPLIED_VERSION, curTargetVersion);
+				curChunk = null;
+			}
+		}
+
+		// Log once when a morph fully drains, so we can see how long/heavy it was.
+		if (queue.isEmpty() && curChunk == null) {
+			if (Config.logging && changedSinceIdle > 0) {
+				DamageBlockSwap.LOGGER.info("Swap morph done: {} blocks over {} ticks.",
+						changedSinceIdle, ticksSinceIdle);
+			}
+			changedSinceIdle = 0;
+			ticksSinceIdle = 0;
+		}
+	}
+
+	/** Picks the next chunk that actually needs work; returns false if the queue is exhausted. */
+	private boolean startNextChunk() {
+		ChunkRef ref;
+		while ((ref = poll()) != null) {
+			LevelChunk chunk = ref.level().getChunkSource().getChunkNow(ref.pos().x(), ref.pos().z());
+			if (chunk == null) {
+				continue; // unloaded since it was queued
+			}
+			int applied = chunk.getAttachedOrElse(DamageBlockSwap.APPLIED_VERSION, 0);
+			int current = SwapTracker.version();
+			if (applied >= current) {
+				continue; // already up to date
+			}
+
+			Map<Block, Block> mapping = SwapTracker.mappingBetween(applied, current);
+			if (mapping.isEmpty()) {
+				chunk.setAttached(DamageBlockSwap.APPLIED_VERSION, current);
+				continue; // nothing visibly changes for this range
+			}
+
+			curLevel = ref.level();
+			curChunk = chunk;
+			curSections = chunk.getSections();
+			curHighest = chunk.getHighestFilledSectionIndex();
+			curMinX = ref.pos().getMinBlockX();
+			curMinZ = ref.pos().getMinBlockZ();
+			curMinY = ref.level().getMinY();
+			curMapping = mapping;
+			curTargetVersion = current;
+			sectionIndex = 0;
+			posInSection = 0;
+			return true;
+		}
+		return false;
+	}
+
+	/** Applies as much of the current chunk as the budget allows. Returns true when the chunk is done. */
+	private boolean processCurrentChunk(int flags) {
+		while (sectionIndex <= curHighest && sectionIndex < curSections.length) {
+			LevelChunkSection section = curSections[sectionIndex];
+			if (section == null || section.hasOnlyAir()) {
+				sectionIndex++;
+				posInSection = 0;
+				continue;
+			}
+
+			int baseY = curMinY + (sectionIndex << 4);
+			while (posInSection < 4096) {
+				// Check budgets (and the wall-clock deadline a few times per section) and, if spent,
+				// pause here — the cursor is saved, so we resume from this exact spot next tick.
+				if (budgetChanges <= 0 || budgetReads <= 0) {
+					return false;
+				}
+				if ((posInSection & 1023) == 0 && System.nanoTime() > deadlineNanos) {
+					return false;
+				}
+				int lx = posInSection & 15;
+				int lz = (posInSection >> 4) & 15;
+				int ly = (posInSection >> 8) & 15;
+
+				Block target = curMapping.get(section.getBlockState(lx, ly, lz).getBlock());
+				budgetReads--;
+				posInSection++;
+				if (target != null) {
+					cursorPos.set(curMinX + lx, baseY + ly, curMinZ + lz);
+					BlockState targetState = target.defaultBlockState();
+					// Only place the swapped block where it can actually stay. This stops fragile
+					// blocks (rails, torches, flowers, redstone, ...) from being placed without
+					// support and then popping off as dropped items.
+					if (targetState.canSurvive(curLevel, cursorPos)) {
+						curLevel.setBlock(cursorPos, targetState, flags);
+						budgetChanges--;
+						changedSinceIdle++;
+					}
+				}
+			}
+			sectionIndex++;
+			posInSection = 0;
+		}
+		return true;
+	}
+
+	private ChunkRef poll() {
+		Iterator<ChunkRef> it = queue.iterator();
+		if (!it.hasNext()) {
+			return null;
+		}
+		ChunkRef ref = it.next();
+		it.remove();
+		return ref;
 	}
 }
