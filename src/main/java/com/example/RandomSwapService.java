@@ -27,20 +27,33 @@ import java.util.Set;
 public final class RandomSwapService {
 	private final Random random = new Random();
 	private List<Block> allowedBlocks = null;
+	private Set<Block> allowedSet = null; // same contents as allowedBlocks, for fast membership tests
+	private int cachedGeneration = -1;
 
 	/** A pair of two different block types to swap. */
 	public record BlockPair(Block a, Block b) {
 	}
 
+	/** (Re)builds the swappable block list if it's missing or the config has changed since. */
+	private void ensureInitialized() {
+		if (allowedBlocks == null || cachedGeneration != Config.generation) {
+			initialize();
+		}
+	}
+
 	/** Scans the whole block registry once and keeps only the blocks we may swap. */
 	public void initialize() {
 		List<Block> list = new ArrayList<>();
+		Set<Block> set = new HashSet<>();
 		for (Block block : BuiltInRegistries.BLOCK) {
 			if (isAllowed(block)) {
 				list.add(block);
+				set.add(block);
 			}
 		}
 		allowedBlocks = list;
+		allowedSet = set;
+		cachedGeneration = Config.generation;
 		DamageBlockSwap.LOGGER.info("Built swappable block list: {} blocks", list.size());
 	}
 
@@ -69,9 +82,7 @@ public final class RandomSwapService {
 	 * are available (which should never realistically happen).
 	 */
 	public BlockPair getRandomPair() {
-		if (allowedBlocks == null) {
-			initialize();
-		}
+		ensureInitialized();
 		if (allowedBlocks.size() < 2) {
 			return null;
 		}
@@ -105,9 +116,7 @@ public final class RandomSwapService {
 	 * chunks are inspected. Used so swaps always hit blocks the player can see.
 	 */
 	public List<Block> collectSwappableNearby(ServerLevel level, BlockPos center, int chunkRadius) {
-		if (allowedBlocks == null) {
-			initialize();
-		}
+		ensureInitialized();
 
 		Set<Block> found = new HashSet<>();
 		int centerChunkX = center.getX() >> 4;
@@ -120,23 +129,18 @@ public final class RandomSwapService {
 					continue; // not loaded — skip
 				}
 
-				LevelChunkSection[] sections = chunk.getSections();
-				int highest = chunk.getHighestFilledSectionIndex();
-				for (int si = 0; si <= highest && si < sections.length; si++) {
-					LevelChunkSection section = sections[si];
+				for (LevelChunkSection section : chunk.getSections()) {
 					if (section == null || section.hasOnlyAir()) {
 						continue;
 					}
-					for (int ly = 0; ly < 16; ly++) {
-						for (int lx = 0; lx < 16; lx++) {
-							for (int lz = 0; lz < 16; lz++) {
-								Block block = section.getBlockState(lx, ly, lz).getBlock();
-								if (!found.contains(block) && isAllowed(block)) {
-									found.add(block);
-								}
-							}
+					// Ask the section's palette for the block types it holds (usually a few dozen)
+					// instead of reading all 16x16x16 = 4096 positions. Hugely cheaper.
+					section.getStates().count((state, count) -> {
+						Block block = state.getBlock();
+						if (allowedSet.contains(block)) {
+							found.add(block);
 						}
-					}
+					});
 				}
 			}
 		}

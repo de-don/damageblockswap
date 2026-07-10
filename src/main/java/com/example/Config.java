@@ -40,6 +40,9 @@ public final class Config {
 	public static final int MAX_SWAPS = 100;
 	public static final int MAX_SWAP_RADIUS = 16;
 
+	/** Bumped whenever settings change, so caches built from the config (e.g. the swappable list) can rebuild. */
+	public static int generation = 0;
+
 	private Config() {
 	}
 
@@ -98,6 +101,7 @@ public final class Config {
 	public static void save() {
 		swapsPerHit = clamp(swapsPerHit, MIN_SWAPS, MAX_SWAPS);
 		blacklist = normalizeBlacklist(blacklist);
+		generation++; // the in-game screen just changed settings — invalidate config-derived caches
 
 		Path path = FabricLoader.getInstance().getConfigDir().resolve(DamageBlockSwap.MOD_ID + ".json");
 		Gson gson = new GsonBuilder().setPrettyPrinting().create();
@@ -119,6 +123,7 @@ public final class Config {
 		pickFromNearbyChunks = d.pickFromNearbyChunks;
 		swapRadius = clamp(d.swapRadius, 1, MAX_SWAP_RADIUS);
 		blacklist = normalizeBlacklist(d.blacklist);
+		generation++; // settings changed — invalidate config-derived caches
 	}
 
 	private static void save(Gson gson, Path path) throws java.io.IOException {

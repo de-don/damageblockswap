@@ -16,11 +16,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 /**
  * The "rule book" of all swaps that have happened, in order.
@@ -40,6 +38,14 @@ public final class SwapTracker {
 	private static final Map<Block, Block> originalToCurrent = new HashMap<>();
 	private static final Map<Block, Block> currentToOriginal = new HashMap<>();
 
+	// Cached mapping for the most common range (version 0 -> current), which every freshly loaded
+	// chunk needs. Invalidated whenever a new rule is recorded.
+	private static Map<Block, Block> fullMappingCache = null;
+
+	// Set when the rule book changes; the actual disk write is deferred (see saveIfDirty).
+	private static boolean dirty = false;
+
+	private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
 	private static final String FILE_NAME = DamageBlockSwap.MOD_ID + "_swaps.json";
 
 	private SwapTracker() {
@@ -61,38 +67,49 @@ public final class SwapTracker {
 		originalToCurrent.put(originalOfB, a);
 		currentToOriginal.put(b, originalOfA);
 		currentToOriginal.put(a, originalOfB);
+
+		fullMappingCache = null;
+		dirty = true;
 	}
 
 	/**
 	 * Combines the swaps in the version range {@code [fromVersion, toVersion)} into a single
 	 * "type -> new type" map, so a chunk that is behind can catch up in one pass.
+	 *
+	 * <p>Built in a single pass over the rules (composing the transpositions with a forward/inverse
+	 * pair of maps), and the common {@code (0, current)} range is cached — that's what every newly
+	 * loaded chunk needs.
 	 */
 	public static Map<Block, Block> mappingBetween(int fromVersion, int toVersion) {
 		int from = Math.max(0, fromVersion);
 		int to = Math.min(swaps.size(), toVersion);
 
-		Set<Block> involved = new HashSet<>();
+		if (from == 0 && to == swaps.size()) {
+			if (fullMappingCache == null) {
+				fullMappingCache = compose(0, to);
+			}
+			return fullMappingCache;
+		}
+		return compose(from, to);
+	}
+
+	/** Composes rules {@code [from, to)} into a "type -> new type" map (identity entries dropped). */
+	private static Map<Block, Block> compose(int from, int to) {
+		Map<Block, Block> forward = new HashMap<>(); // block-as-of-`from` -> block-as-of-`to`
+		Map<Block, Block> inverse = new HashMap<>(); // and back again, to update in O(1) per rule
 		for (int i = from; i < to; i++) {
-			involved.add(swaps.get(i).a());
-			involved.add(swaps.get(i).b());
+			Block a = swaps.get(i).a();
+			Block b = swaps.get(i).b();
+			Block preA = inverse.getOrDefault(a, a);
+			Block preB = inverse.getOrDefault(b, b);
+			forward.put(preA, b);
+			forward.put(preB, a);
+			inverse.put(b, preA);
+			inverse.put(a, preB);
 		}
 
-		Map<Block, Block> mapping = new HashMap<>();
-		for (Block type : involved) {
-			Block result = type;
-			for (int i = from; i < to; i++) {
-				RandomSwapService.BlockPair pair = swaps.get(i);
-				if (result == pair.a()) {
-					result = pair.b();
-				} else if (result == pair.b()) {
-					result = pair.a();
-				}
-			}
-			if (result != type) {
-				mapping.put(type, result);
-			}
-		}
-		return mapping;
+		forward.entrySet().removeIf(e -> e.getKey() == e.getValue());
+		return forward;
 	}
 
 	// --- Lookup helpers for /dbs and the screen ------------------------------------------------
@@ -118,6 +135,7 @@ public final class SwapTracker {
 		swaps.clear();
 		originalToCurrent.clear();
 		currentToOriginal.clear();
+		fullMappingCache = null;
 	}
 
 	// --- Persistence: the ordered rule list, in the world folder -------------------------------
@@ -133,9 +151,8 @@ public final class SwapTracker {
 			return;
 		}
 
-		Gson gson = new Gson();
 		try (Reader reader = Files.newBufferedReader(path)) {
-			List<List<String>> raw = gson.fromJson(reader, new TypeToken<List<List<String>>>() {
+			List<List<String>> raw = GSON.fromJson(reader, new TypeToken<List<List<String>>>() {
 			}.getType());
 			if (raw == null) {
 				return;
@@ -153,12 +170,20 @@ public final class SwapTracker {
 			DamageBlockSwap.LOGGER.info("Loaded swap rules: version {}", version());
 		} catch (Exception ex) {
 			DamageBlockSwap.LOGGER.warn("Failed to load swap rules", ex);
+		} finally {
+			dirty = false; // just-loaded state is already on disk
+		}
+	}
+
+	/** Writes to disk only if something changed since the last save (used for periodic saving). */
+	public static void saveIfDirty(MinecraftServer server) {
+		if (dirty) {
+			save(server);
 		}
 	}
 
 	public static void save(MinecraftServer server) {
 		Path path = filePath(server);
-		Gson gson = new GsonBuilder().setPrettyPrinting().create();
 
 		List<List<String>> raw = new ArrayList<>();
 		for (RandomSwapService.BlockPair pair : swaps) {
@@ -166,7 +191,8 @@ public final class SwapTracker {
 		}
 
 		try (Writer writer = Files.newBufferedWriter(path)) {
-			gson.toJson(raw, writer);
+			GSON.toJson(raw, writer);
+			dirty = false;
 		} catch (Exception ex) {
 			DamageBlockSwap.LOGGER.warn("Failed to save swap rules", ex);
 		}

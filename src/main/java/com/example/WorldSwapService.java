@@ -2,6 +2,7 @@ package com.example;
 
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerChunkEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
+import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.MinecraftServer;
@@ -32,7 +33,6 @@ public final class WorldSwapService {
 	// Per-tick work limits. Changing a block (especially with physics) is the costly part.
 	private static final int CHANGES_PER_TICK_PHYSICS = 6_000;
 	private static final int CHANGES_PER_TICK_NO_PHYSICS = 40_000;
-	private static final int READS_PER_TICK = 1_000_000;
 	// Hard wall-clock cap: never spend more than this on swaps in one tick, whatever the cost.
 	private static final long MAX_NANOS_PER_TICK = 8_000_000L; // 8 ms
 
@@ -62,7 +62,6 @@ public final class WorldSwapService {
 	private int posInSection;
 
 	private int budgetChanges;
-	private int budgetReads;
 	private long deadlineNanos;
 
 	// Diagnostics: how much a still-draining morph has done, so we can log when it finishes.
@@ -76,6 +75,8 @@ public final class WorldSwapService {
 		});
 		// New terrain (or a chunk reloaded after exploring) catches up here.
 		ServerChunkEvents.CHUNK_LOAD.register((level, chunk, newlyGenerated) -> enqueueIfBehind(level, chunk));
+		// Forget a player's tracked position when they leave.
+		ServerPlayConnectionEvents.DISCONNECT.register((handler, server) -> lastPlayerChunk.remove(handler.player.getUUID()));
 	}
 
 	/** Refreshes the area around the player right after a hit, so the swap shows immediately. */
@@ -137,12 +138,11 @@ public final class WorldSwapService {
 		}
 
 		budgetChanges = Config.updateNeighbors ? CHANGES_PER_TICK_PHYSICS : CHANGES_PER_TICK_NO_PHYSICS;
-		budgetReads = READS_PER_TICK;
 		deadlineNanos = System.nanoTime() + MAX_NANOS_PER_TICK;
 		int flags = Config.updateNeighbors ? Block.UPDATE_ALL : Block.UPDATE_CLIENTS;
 		ticksSinceIdle++;
 
-		while (budgetChanges > 0 && budgetReads > 0 && System.nanoTime() < deadlineNanos) {
+		while (budgetChanges > 0 && System.nanoTime() < deadlineNanos) {
 			if (curChunk == null && !startNextChunk()) {
 				break; // nothing left to do
 			}
@@ -203,7 +203,10 @@ public final class WorldSwapService {
 	private boolean processCurrentChunk(int flags) {
 		while (sectionIndex <= curHighest && sectionIndex < curSections.length) {
 			LevelChunkSection section = curSections[sectionIndex];
-			if (section == null || section.hasOnlyAir()) {
+			// Skip sections that are all air, or — via the palette — hold none of the blocks this
+			// range touches. Both checks are cheap and skip the vast majority of sections.
+			if (section == null || section.hasOnlyAir()
+					|| (posInSection == 0 && !section.maybeHas(state -> curMapping.containsKey(state.getBlock())))) {
 				sectionIndex++;
 				posInSection = 0;
 				continue;
@@ -211,9 +214,9 @@ public final class WorldSwapService {
 
 			int baseY = curMinY + (sectionIndex << 4);
 			while (posInSection < 4096) {
-				// Check budgets (and the wall-clock deadline a few times per section) and, if spent,
-				// pause here — the cursor is saved, so we resume from this exact spot next tick.
-				if (budgetChanges <= 0 || budgetReads <= 0) {
+				// Check the change budget and the wall-clock deadline (a few times per section) and,
+				// if spent, pause here — the cursor is saved, so we resume from this spot next tick.
+				if (budgetChanges <= 0) {
 					return false;
 				}
 				if ((posInSection & 1023) == 0 && System.nanoTime() > deadlineNanos) {
@@ -224,7 +227,6 @@ public final class WorldSwapService {
 				int ly = (posInSection >> 8) & 15;
 
 				Block target = curMapping.get(section.getBlockState(lx, ly, lz).getBlock());
-				budgetReads--;
 				posInSection++;
 				if (target != null) {
 					cursorPos.set(curMinX + lx, baseY + ly, curMinZ + lz);

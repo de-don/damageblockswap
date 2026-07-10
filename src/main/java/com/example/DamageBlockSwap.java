@@ -6,6 +6,8 @@ import net.fabricmc.fabric.api.attachment.v1.AttachmentType;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.fabricmc.fabric.api.entity.event.v1.ServerLivingEntityEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
+import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
 
 import com.mojang.serialization.Codec;
 
@@ -22,7 +24,10 @@ import net.minecraft.world.level.block.Block;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 
 /**
  * Entry point of the mod.
@@ -47,8 +52,11 @@ public class DamageBlockSwap implements ModInitializer {
 	private final RandomSwapService randomSwapService = new RandomSwapService();
 	private final WorldSwapService worldSwapService = new WorldSwapService();
 
-	// Used only for the optional cooldown between swaps.
-	private long lastSwapMillis = 0L;
+	// Per-player server-tick of the last swap, for the optional cooldown.
+	private final Map<UUID, Integer> lastSwapTick = new HashMap<>();
+
+	// How often (in ticks) to flush the rule book to disk if it changed.
+	private static final int SAVE_INTERVAL_TICKS = 200; // ~10 seconds
 
 	@Override
 	public void onInitialize() {
@@ -63,12 +71,21 @@ public class DamageBlockSwap implements ModInitializer {
 		//   blocked          - true if a shield fully blocked it
 		ServerLivingEntityEvents.AFTER_DAMAGE.register(this::onEntityDamaged);
 
-		// The swap map is saved inside the world folder, so load/save it with the world.
+		// The rule book is saved inside the world folder, so load/save it with the world. To avoid
+		// hammering the disk on rapid damage, the write is deferred and flushed periodically.
 		ServerLifecycleEvents.SERVER_STARTED.register(SwapTracker::load);
+		ServerTickEvents.END_SERVER_TICK.register(server -> {
+			if (server.getTickCount() % SAVE_INTERVAL_TICKS == 0) {
+				SwapTracker.saveIfDirty(server);
+			}
+		});
 		ServerLifecycleEvents.SERVER_STOPPING.register(server -> {
 			SwapTracker.save(server);
 			worldSwapService.reset(); // don't let unfinished work leak into the next world
 		});
+
+		// Forget a player's cooldown timer when they leave.
+		ServerPlayConnectionEvents.DISCONNECT.register((handler, server) -> lastSwapTick.remove(handler.player.getUUID()));
 
 		// /damageblockswap (alias /dbs) — inspect what turned into what.
 		CommandRegistrationCallback.EVENT.register((dispatcher, registry, environment) ->
@@ -85,14 +102,16 @@ public class DamageBlockSwap implements ModInitializer {
 		// World logic only runs on the server side.
 		if (!(entity.level() instanceof ServerLevel serverLevel)) return;
 
-		// Optional cooldown so rapid damage (fire, drowning) doesn't spam swaps.
+		MinecraftServer server = serverLevel.getServer();
+
+		// Optional per-player cooldown so rapid damage (fire, drowning) doesn't spam swaps.
 		if (Config.cooldownTicks > 0) {
-			long now = System.currentTimeMillis();
-			if (now - lastSwapMillis < (long) Config.cooldownTicks * 50L) return;
-			lastSwapMillis = now;
+			int now = server.getTickCount();
+			Integer last = lastSwapTick.get(player.getUUID());
+			if (last != null && now - last < Config.cooldownTicks) return;
+			lastSwapTick.put(player.getUUID(), now);
 		}
 
-		MinecraftServer server = serverLevel.getServer();
 		BlockPos playerPos = player.blockPosition();
 
 		// Optionally choose the swapped blocks from ones that actually exist in the affected area,
@@ -124,9 +143,7 @@ public class DamageBlockSwap implements ModInitializer {
 			LOGGER.info("Player {} took damage. Added {} rule(s), version now {}, {} chunks queued.",
 					player.getName().getString(), added, SwapTracker.version(), worldSwapService.queueSize());
 		}
-
-		// Persist the rule book right away so it survives crashes.
-		SwapTracker.save(server);
+		// The rule book is now dirty; it's flushed to disk by the periodic saver (and on stop).
 	}
 
 	private void announce(Player player, RandomSwapService.BlockPair pair) {
