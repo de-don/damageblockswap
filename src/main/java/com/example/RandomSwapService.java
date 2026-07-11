@@ -5,6 +5,7 @@ import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.EntityBlock;
 import net.minecraft.world.level.block.FallingBlock;
 import net.minecraft.world.level.block.LiquidBlock;
@@ -62,6 +63,9 @@ public final class RandomSwapService {
 
 		// Never swap the various flavors of air.
 		if (state.isAir()) return false;
+
+		// Never swap bedrock — turning stone into unbreakable bedrock would trap the player.
+		if (block == Blocks.BEDROCK) return false;
 
 		// Any block that stores data in a BlockEntity (chests, furnaces, signs, banners,
 		// shulker boxes, spawners, beehives, decorated pots, vaults, ...) implements
