@@ -31,6 +31,8 @@ public final class Config {
 	public static boolean updateNeighbors = false;
 	/** When true, the two swapped block types are chosen from blocks actually near the player. */
 	public static boolean pickFromNearbyChunks = true;
+	/** "Full chaos": the second swapped block can be ANY block, not just ones near the player. */
+	public static boolean fullChaos = false;
 	/** Area of effect around the player, in chunks: where swaps apply immediately and which blocks are picked. Smaller = less lag. */
 	public static int swapRadius = 3;
 	/** Block IDs that are never swapped, e.g. {@code "minecraft:bedrock"}. Normalized on load. */
@@ -65,6 +67,8 @@ public final class Config {
 		boolean updateNeighbors = false;
 		String _help_pickFromNearbyChunks = "Choose the swapped blocks from ones that actually exist near the player, so hits are always visible.";
 		boolean pickFromNearbyChunks = true;
+		String _help_fullChaos = "Full chaos: with pickFromNearbyChunks on, the FIRST block is still one near you, but the SECOND can be ANY block in the game. More variety.";
+		boolean fullChaos = false;
 		String _help_swapRadius = "Area of effect around the player, in chunks (1..16). Swaps apply immediately within this bubble (which follows you as you move) and to new chunks as they load. Smaller = less lag; larger = more of the world changes at once.";
 		int swapRadius = 3;
 	}
@@ -121,6 +125,7 @@ public final class Config {
 		cooldownTicks = d.cooldownTicks;
 		updateNeighbors = d.updateNeighbors;
 		pickFromNearbyChunks = d.pickFromNearbyChunks;
+		fullChaos = d.fullChaos;
 		swapRadius = clamp(d.swapRadius, 1, MAX_SWAP_RADIUS);
 		blacklist = normalizeBlacklist(d.blacklist);
 		generation++; // settings changed — invalidate config-derived caches
@@ -140,6 +145,7 @@ public final class Config {
 		out.cooldownTicks = cooldownTicks;
 		out.updateNeighbors = updateNeighbors;
 		out.pickFromNearbyChunks = pickFromNearbyChunks;
+		out.fullChaos = fullChaos;
 		out.swapRadius = swapRadius;
 
 		try (Writer writer = Files.newBufferedWriter(path)) {

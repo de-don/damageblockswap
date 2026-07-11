@@ -84,6 +84,13 @@ public class ModMenuIntegration implements ModMenuApi {
 					.setSaveConsumer(value -> Config.pickFromNearbyChunks = value)
 					.build());
 
+			general.addEntry(entry.startBooleanToggle(
+							Component.literal("Full chaos"), Config.fullChaos)
+					.setDefaultValue(false)
+					.setTooltip(Component.literal("The first swapped block is still one near you, but the second can be ANY block in the game. More variety, more chaos."))
+					.setSaveConsumer(value -> Config.fullChaos = value)
+					.build());
+
 			general.addEntry(entry.startIntSlider(
 							Component.literal("Area of effect (chunks)"), Config.swapRadius, 1, Config.MAX_SWAP_RADIUS)
 					.setDefaultValue(3)

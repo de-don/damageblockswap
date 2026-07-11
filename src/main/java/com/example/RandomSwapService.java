@@ -105,6 +105,23 @@ public final class RandomSwapService {
 		return pickTwo(pool);
 	}
 
+	/**
+	 * "Full chaos": the first block is taken from {@code pool} (so the hit visibly changes something
+	 * nearby), but the second can be ANY swappable block in the game — not just ones around you.
+	 */
+	public BlockPair getMixedPair(List<Block> pool) {
+		ensureInitialized();
+		if (pool == null || pool.isEmpty() || allowedBlocks.size() < 2) {
+			return getRandomPairFrom(pool);
+		}
+		Block a = pool.get(random.nextInt(pool.size()));
+		Block b;
+		do {
+			b = allowedBlocks.get(random.nextInt(allowedBlocks.size()));
+		} while (b == a);
+		return new BlockPair(a, b);
+	}
+
 	private BlockPair pickTwo(List<Block> pool) {
 		Block a = pool.get(random.nextInt(pool.size()));
 		Block b;

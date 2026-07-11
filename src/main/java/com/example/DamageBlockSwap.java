@@ -124,9 +124,15 @@ public class DamageBlockSwap implements ModInitializer {
 		// One hit can add several rules (configurable).
 		int added = 0;
 		for (int i = 0; i < Config.swapsPerHit; i++) {
-			RandomSwapService.BlockPair pair = nearbyPool != null
-					? randomSwapService.getRandomPairFrom(nearbyPool)
-					: randomSwapService.getRandomPair();
+			RandomSwapService.BlockPair pair;
+			if (nearbyPool != null) {
+				// Full chaos keeps the first block nearby (visible) but lets the second be anything.
+				pair = Config.fullChaos
+						? randomSwapService.getMixedPair(nearbyPool)
+						: randomSwapService.getRandomPairFrom(nearbyPool);
+			} else {
+				pair = randomSwapService.getRandomPair();
+			}
 			if (pair == null) break; // not enough swappable blocks (should never happen)
 
 			SwapTracker.recordSwap(pair.a(), pair.b()); // new rule -> version goes up
