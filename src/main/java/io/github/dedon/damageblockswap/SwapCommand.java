@@ -1,16 +1,17 @@
-package com.example;
+package io.github.dedon.damageblockswap;
 
 import com.mojang.brigadier.CommandDispatcher;
-import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.context.CommandContext;
+import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import com.mojang.brigadier.tree.LiteralCommandNode;
 
+import net.minecraft.commands.CommandBuildContext;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
-import net.minecraft.commands.SharedSuggestionProvider;
+import net.minecraft.commands.arguments.ResourceArgument;
 import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.Identifier;
 import net.minecraft.world.level.block.Block;
 
 import java.util.Map;
@@ -27,17 +28,16 @@ public final class SwapCommand {
 	private SwapCommand() {
 	}
 
-	public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
+	public static void register(CommandDispatcher<CommandSourceStack> dispatcher, CommandBuildContext buildContext) {
 		LiteralCommandNode<CommandSourceStack> root = dispatcher.register(
 				Commands.literal("damageblockswap")
 						.then(Commands.literal("list")
 								.executes(SwapCommand::runList))
 						.then(Commands.literal("lookup")
-								.then(Commands.argument("block", StringArgumentType.string())
-										.suggests((ctx, builder) -> SharedSuggestionProvider.suggest(
-												BuiltInRegistries.BLOCK.keySet().stream().map(Identifier::toString),
-												builder))
-										.executes(ctx -> runLookup(ctx, StringArgumentType.getString(ctx, "block"))))));
+								// A registry argument: accepts "stone" and "minecraft:stone" alike, suggests
+								// every block ID and reports unknown IDs with the vanilla error message.
+								.then(Commands.argument("block", ResourceArgument.resource(buildContext, Registries.BLOCK))
+										.executes(SwapCommand::runLookup))));
 
 		// Short alias: /dbs -> same command tree.
 		dispatcher.register(Commands.literal("dbs").redirect(root));
@@ -61,15 +61,9 @@ public final class SwapCommand {
 		return changes.size();
 	}
 
-	private static int runLookup(CommandContext<CommandSourceStack> ctx, String input) {
+	private static int runLookup(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
 		CommandSourceStack source = ctx.getSource();
-
-		Identifier id = Identifier.tryParse(input);
-		Block block = id == null ? null : BuiltInRegistries.BLOCK.getOptional(id).orElse(null);
-		if (block == null) {
-			source.sendFailure(Component.literal("Unknown block: " + input));
-			return 0;
-		}
+		Block block = ResourceArgument.getResource(ctx, "block", Registries.BLOCK).value();
 
 		Block nowLooksLike = SwapTracker.currentAppearanceOf(block);
 		Block wasOriginally = SwapTracker.originalOf(block);

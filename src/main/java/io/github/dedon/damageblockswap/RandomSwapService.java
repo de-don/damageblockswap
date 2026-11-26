@@ -1,4 +1,4 @@
-package com.example;
+package io.github.dedon.damageblockswap;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;

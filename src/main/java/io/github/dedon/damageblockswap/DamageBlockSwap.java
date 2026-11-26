@@ -1,9 +1,10 @@
-package com.example;
+package io.github.dedon.damageblockswap;
 
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.attachment.v1.AttachmentRegistry;
 import net.fabricmc.fabric.api.attachment.v1.AttachmentType;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
+import net.fabricmc.fabric.api.entity.FakePlayer;
 import net.fabricmc.fabric.api.entity.event.v1.ServerLivingEntityEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
@@ -71,9 +72,15 @@ public class DamageBlockSwap implements ModInitializer {
 		//   blocked          - true if a shield fully blocked it
 		ServerLivingEntityEvents.AFTER_DAMAGE.register(this::onEntityDamaged);
 
-		// The rule book is saved inside the world folder, so load/save it with the world. To avoid
-		// hammering the disk on rapid damage, the write is deferred and flushed periodically.
-		ServerLifecycleEvents.SERVER_STARTED.register(SwapTracker::load);
+		// The rule book is saved inside the world folder, so load/save it with the world.
+		// Load on SERVER_STARTING (before the levels and their spawn chunks are loaded), so the
+		// CHUNK_LOAD checks of those first chunks already compare against this world's rule book
+		// and not the previous world's. To avoid hammering the disk on rapid damage, the write is
+		// deferred and flushed periodically.
+		ServerLifecycleEvents.SERVER_STARTING.register(server -> {
+			resetSessionState(); // in case a previous server didn't shut down cleanly
+			SwapTracker.load(server);
+		});
 		ServerTickEvents.END_SERVER_TICK.register(server -> {
 			if (server.getTickCount() % SAVE_INTERVAL_TICKS == 0) {
 				SwapTracker.saveIfDirty(server);
@@ -81,23 +88,37 @@ public class DamageBlockSwap implements ModInitializer {
 		});
 		ServerLifecycleEvents.SERVER_STOPPING.register(server -> {
 			SwapTracker.save(server);
-			worldSwapService.reset(); // don't let unfinished work leak into the next world
+			resetSessionState(); // don't let unfinished work leak into the next world
 		});
+		// Once the world is fully closed, forget its rule book too, so the swap map screen / Mod
+		// Menu tab don't keep showing it (e.g. after leaving to the title screen or joining another
+		// server). Done on STOPPED rather than STOPPING so nothing still running during shutdown
+		// sees an empty rule book.
+		ServerLifecycleEvents.SERVER_STOPPED.register(server -> SwapTracker.clear());
 
 		// Forget a player's cooldown timer when they leave.
 		ServerPlayConnectionEvents.DISCONNECT.register((handler, server) -> lastSwapTick.remove(handler.player.getUUID()));
 
 		// /damageblockswap (alias /dbs) — inspect what turned into what.
 		CommandRegistrationCallback.EVENT.register((dispatcher, registry, environment) ->
-				SwapCommand.register(dispatcher));
+				SwapCommand.register(dispatcher, registry));
 
 		LOGGER.info("Damage Block Swap initialized.");
+	}
+
+	/** Drops all per-world runtime state (pending chunk work, player tracking, cooldowns). */
+	private void resetSessionState() {
+		worldSwapService.reset();
+		lastSwapTick.clear();
 	}
 
 	private void onEntityDamaged(LivingEntity entity, DamageSource source,
 	                             float baseDamageTaken, float damageTaken, boolean blocked) {
 		// Only react to players who genuinely took damage.
 		if (!(entity instanceof Player player)) return;
+		// Fake players (mod machines, Carpet bots, ...) are not real players taking damage; without
+		// this check an automated farm would add rules nonstop.
+		if (player instanceof FakePlayer) return;
 		if (blocked || damageTaken <= 0.0F) return;
 		// World logic only runs on the server side.
 		if (!(entity.level() instanceof ServerLevel serverLevel)) return;

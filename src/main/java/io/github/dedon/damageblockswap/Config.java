@@ -1,4 +1,4 @@
-package com.example;
+package io.github.dedon.damageblockswap;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
@@ -11,6 +11,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 /**
  * Simple JSON config, stored at {@code config/damageblockswap.json}.
@@ -155,7 +156,7 @@ public final class Config {
 	 * Cleans up blacklist entries so matching is forgiving: trims whitespace, lowercases,
 	 * drops blanks, and adds the {@code minecraft:} namespace when the user omitted it.
 	 */
-	private static List<String> normalizeBlacklist(List<String> raw) {
+	static List<String> normalizeBlacklist(List<String> raw) {
 		List<String> result = new ArrayList<>();
 		if (raw == null) {
 			return result;
@@ -164,7 +165,9 @@ public final class Config {
 			if (entry == null) {
 				continue;
 			}
-			String id = entry.trim().toLowerCase();
+			// Locale.ROOT: under e.g. a Turkish default locale "I" would lowercase to a dotless "ı"
+			// and the ID would silently stop matching.
+			String id = entry.trim().toLowerCase(Locale.ROOT);
 			if (id.isEmpty()) {
 				continue;
 			}

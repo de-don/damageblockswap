@@ -1,4 +1,4 @@
-package com.example;
+package io.github.dedon.damageblockswap;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
@@ -131,11 +131,13 @@ public final class SwapTracker {
 		return changes;
 	}
 
+	/** Forgets the rule book entirely (used on load and once the world is closed). */
 	public static void clear() {
 		swaps.clear();
 		originalToCurrent.clear();
 		currentToOriginal.clear();
 		fullMappingCache = null;
+		dirty = false; // an empty, forgotten rule book must never be written over a world's file
 	}
 
 	// --- Persistence: the ordered rule list, in the world folder -------------------------------

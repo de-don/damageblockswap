@@ -1,4 +1,4 @@
-package com.example.client;
+package io.github.dedon.damageblockswap.client;
 
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;

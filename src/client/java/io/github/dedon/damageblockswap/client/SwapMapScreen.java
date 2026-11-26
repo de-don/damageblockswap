@@ -1,6 +1,6 @@
-package com.example.client;
+package io.github.dedon.damageblockswap.client;
 
-import com.example.SwapTracker;
+import io.github.dedon.damageblockswap.SwapTracker;
 
 import me.shedaniel.clothconfig2.api.ConfigBuilder;
 import me.shedaniel.clothconfig2.api.ConfigCategory;

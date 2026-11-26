@@ -46,6 +46,15 @@ dependencies {
 		// Cloth bundles its own Fabric API build; we already provide one above.
 		exclude(group: "net.fabricmc.fabric-api")
 	}
+
+	// Plain JUnit for the pure-logic parts (no Minecraft bootstrap needed).
+	testImplementation platform("org.junit:junit-bom:5.13.4")
+	testImplementation "org.junit.jupiter:junit-jupiter"
+	testRuntimeOnly "org.junit.platform:junit-platform-launcher"
+}
+
+test {
+	useJUnitPlatform()
 }
 
 processResources {

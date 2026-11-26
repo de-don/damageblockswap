@@ -1,14 +1,16 @@
-package com.example;
+package io.github.dedon.damageblockswap;
 
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerChunkEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
 
 import net.minecraft.core.BlockPos;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.chunk.LevelChunk;
@@ -43,8 +45,15 @@ public final class WorldSwapService {
 	// Ordered, de-duplicated set of chunks waiting to be updated.
 	private final LinkedHashSet<ChunkRef> queue = new LinkedHashSet<>();
 
-	// Last chunk each player was in, so we notice when they cross into a new chunk.
-	private final Map<UUID, ChunkPos> lastPlayerChunk = new HashMap<>();
+	/**
+	 * A chunk in a specific dimension. Chunk coordinates alone are ambiguous: after a portal or
+	 * {@code /execute in} teleport a player can land on the same (x, z) in another dimension.
+	 */
+	record DimensionChunk(ResourceKey<Level> dimension, ChunkPos pos) {
+	}
+
+	// Last chunk (and dimension) each player was in, so we notice when they cross into a new one.
+	private final Map<UUID, DimensionChunk> lastPlayerChunk = new HashMap<>();
 
 	private final BlockPos.MutableBlockPos cursorPos = new BlockPos.MutableBlockPos();
 
@@ -91,14 +100,16 @@ public final class WorldSwapService {
 	 */
 	private void trackPlayerMovement(MinecraftServer server) {
 		for (ServerPlayer player : server.getPlayerList().getPlayers()) {
+			if (!(player.level() instanceof ServerLevel level)) {
+				continue;
+			}
 			BlockPos pos = player.blockPosition();
-			ChunkPos current = new ChunkPos(pos.getX() >> 4, pos.getZ() >> 4);
-			ChunkPos previous = lastPlayerChunk.get(player.getUUID());
+			ChunkPos chunkPos = new ChunkPos(pos.getX() >> 4, pos.getZ() >> 4);
+			DimensionChunk current = new DimensionChunk(level.dimension(), chunkPos);
+			DimensionChunk previous = lastPlayerChunk.get(player.getUUID());
 			if (!current.equals(previous)) {
 				lastPlayerChunk.put(player.getUUID(), current);
-				if (player.level() instanceof ServerLevel level) {
-					refreshAround(level, current.x(), current.z(), Config.swapRadius);
-				}
+				refreshAround(level, chunkPos.x(), chunkPos.z(), Config.swapRadius);
 			}
 		}
 	}
@@ -118,7 +129,18 @@ public final class WorldSwapService {
 	public void reset() {
 		queue.clear();
 		lastPlayerChunk.clear();
+		// Drop every reference into the old world (level, chunk, its sections and the mapping),
+		// so a closed world isn't kept alive in memory until the next one starts processing.
+		curLevel = null;
 		curChunk = null;
+		curSections = null;
+		curMapping = null;
+		curTargetVersion = 0;
+		curHighest = 0;
+		sectionIndex = 0;
+		posInSection = 0;
+		changedSinceIdle = 0;
+		ticksSinceIdle = 0;
 	}
 
 	/** How many chunks are waiting to be updated (for diagnostics). */

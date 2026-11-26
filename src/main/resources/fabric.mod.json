@@ -14,13 +14,13 @@
 	"environment": "*",
 	"entrypoints": {
 		"main": [
-			"com.example.DamageBlockSwap"
+			"io.github.dedon.damageblockswap.DamageBlockSwap"
 		],
 		"client": [
-			"com.example.client.DamageBlockSwapClient"
+			"io.github.dedon.damageblockswap.client.DamageBlockSwapClient"
 		],
 		"modmenu": [
-			"com.example.client.ModMenuIntegration"
+			"io.github.dedon.damageblockswap.client.ModMenuIntegration"
 		]
 	},
 	"depends": {
