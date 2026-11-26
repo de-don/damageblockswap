@@ -26,18 +26,21 @@ public class ChunkResumeGameTest {
 	// Changes done before the chunk is unloaded: well under the 16 * 16 * 48 = 12288 blocks.
 	private static final int PARTIAL_CHANGES = 5_000;
 
+	// What the chunk listeners saw during the current run (reset when the test starts, so a second run
+	// in the same JVM, e.g. /test runall, starts clean). The listeners can only be registered once.
+	private static volatile boolean armed;
 	private static volatile boolean centerUnloaded;
 	private static volatile boolean centerReloaded;
 	private static volatile SwapProgress progressAtReload;
 
 	static {
 		ServerChunkEvents.CHUNK_UNLOAD.register((level, chunk) -> {
-			if (isCenter(level, chunk)) {
+			if (armed && isCenter(level, chunk)) {
 				centerUnloaded = true;
 			}
 		});
-		// Registered after the mod's own listener (this mod depends on it), which only queues the
-		// chunk; the chunk is worked on at the end of the tick, so this still sees what was loaded.
+		// Whether this runs before or after the mod's own CHUNK_LOAD listener doesn't matter: that one
+		// only queues the chunk, which is worked on at the end of the tick, so this sees what was loaded.
 		ServerChunkEvents.CHUNK_LOAD.register((level, chunk, newlyGenerated) -> {
 			if (isCenter(level, chunk) && centerUnloaded && !centerReloaded) {
 				progressAtReload = chunk.getAttached(DamageBlockSwap.SWAP_PROGRESS);
@@ -91,9 +94,16 @@ public class ChunkResumeGameTest {
 		int[] target = new int[1];
 
 		helper.startSequence()
-				.thenExecute(() -> force(level, true))
-				// Wait for the 5x5 that the forced 3x3 keeps fully loaded, so no late chunk load makes
-				// the mod pick up the test chunk on its own before it has been unloaded.
+				.thenExecute(() -> {
+					armed = false;
+					centerUnloaded = false;
+					centerReloaded = false;
+					progressAtReload = null;
+					force(level, true);
+				})
+				// Wait for the 5x5 around the test chunk (a forced chunk keeps everything within 2 chunks
+				// fully loaded), so no late neighbour load makes the mod pick up the test chunk on its own
+				// before it has been unloaded.
 				.thenWaitUntil(() -> helper.assertTrue(loadedAround(level, 2), "chunks around the test chunk still loading"))
 				.thenExecute(() -> {
 					LevelChunk chunk = level.getChunkSource().getChunkNow(CX, CZ);
@@ -128,6 +138,7 @@ public class ChunkResumeGameTest {
 							"progress not saved with the chunk: " + progress);
 					partialPosition[0] = job.position();
 
+					armed = true;
 					force(level, false); // let it unload (and be saved) half done
 				})
 				.thenWaitUntil(() -> helper.assertTrue(centerUnloaded, "test chunk not unloaded yet"))

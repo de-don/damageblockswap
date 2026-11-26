@@ -89,6 +89,9 @@ public final class SwapTracker {
 		UUID stampId = chunk.getAttached(DamageBlockSwap.JOURNAL_ID);
 		SwapProgress progress = chunk.getAttached(DamageBlockSwap.SWAP_PROGRESS);
 		ChunkJob.Plan plan = ChunkJob.plan(store, stampId, stampVersion, progress);
+		if (plan.staleProgress()) {
+			chunk.removeAttached(DamageBlockSwap.SWAP_PROGRESS); // left over from a finished pass
+		}
 		// When the journal is unreadable, everything is skipped and that's logged once at load.
 		if (plan.isQuarantined() && store.writable()) {
 			warnQuarantined(chunk, plan.problem(), plan.problemId(), plan.problemVersion());

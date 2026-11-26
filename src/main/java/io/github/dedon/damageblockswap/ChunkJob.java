@@ -57,13 +57,15 @@ final class ChunkJob<T> {
 	/**
 	 * What a chunk needs: nothing, to be left alone (quarantined), or a pass {@code from -> to}
 	 * starting at cell {@code position}. For a quarantine, {@code problemId}/{@code problemVersion}
-	 * are the stamp (or progress record) that caused it, for the log.
+	 * are the stamp (or progress record) that caused it, for the log. {@code staleProgress}: the
+	 * chunk's progress record is left over from a pass its stamp already covers and should be removed.
 	 */
-	record Plan(int from, int to, int position, ChunkStamp.Problem problem, UUID problemId, int problemVersion) {
-		static final Plan UP_TO_DATE = new Plan(0, 0, 0, null, null, 0);
+	record Plan(int from, int to, int position, ChunkStamp.Problem problem, UUID problemId, int problemVersion,
+	            boolean staleProgress) {
+		static final Plan UP_TO_DATE = new Plan(0, 0, 0, null, null, 0, false);
 
 		static Plan quarantined(ChunkStamp.Problem problem, UUID id, int version) {
-			return new Plan(0, 0, 0, problem, id, version);
+			return new Plan(0, 0, 0, problem, id, version, false);
 		}
 
 		boolean isQuarantined() {
@@ -109,6 +111,7 @@ final class ChunkJob<T> {
 			return Plan.quarantined(stamp.problem(), stampId, stampVersion);
 		}
 		int from = stamp.startVersion();
+		boolean stale = false;
 		if (progress != null) {
 			// The pass must be finished exactly as it was started: its target is a version the
 			// journal on disk still backs, and it starts where the stamp is. Otherwise nobody knows
@@ -117,14 +120,28 @@ final class ChunkJob<T> {
 			if (target.isQuarantined()) {
 				return Plan.quarantined(target.problem(), progress.journalId(), progress.toVersion());
 			}
-			if (progress.fromVersion() != from || progress.toVersion() <= from || progress.position() < 0) {
+			if (isLeftOverOfFinishedPass(progress, from)) {
+				// The stamp already says the whole chunk is at the record's target (the stamp and the
+				// record are always written together, so only edited chunk data gets here). The stamp
+				// is trusted as for any chunk: plan as without a record, and drop the record.
+				stale = true;
+			} else if (progress.fromVersion() != from || progress.toVersion() <= from || progress.position() < 0) {
 				return Plan.quarantined(ChunkStamp.Problem.PROGRESS_MISMATCH, progress.journalId(),
 						progress.toVersion());
+			} else {
+				return new Plan(from, progress.toVersion(), progress.position(), null, null, 0, false);
 			}
-			return new Plan(from, progress.toVersion(), progress.position(), null, null, 0);
 		}
 		int to = store.persistedVersion(); // only rules that are on disk, see JournalStore
-		return from < to ? new Plan(from, to, 0, null, null, 0) : Plan.UP_TO_DATE;
+		if (from < to) {
+			return new Plan(from, to, 0, null, null, 0, stale);
+		}
+		return stale ? new Plan(0, 0, 0, null, null, 0, true) : Plan.UP_TO_DATE;
+	}
+
+	/** A record whose target is the stamp itself: that pass is done, nothing to resume. */
+	private static boolean isLeftOverOfFinishedPass(SwapProgress progress, int stampVersion) {
+		return progress.toVersion() == stampVersion && progress.fromVersion() <= stampVersion;
 	}
 
 	static <T> ChunkJob<T> start(JournalStore<T> store, ChunkData<T> chunk, Plan plan) {

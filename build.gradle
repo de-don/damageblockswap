@@ -38,7 +38,17 @@ fabricApi {
 		modId = "damageblockswap-gametest"
 		enableGameTests = true
 		enableClientGameTests = false
+		// Accepts the Minecraft EULA for the throw-away test server (build/run/gameTest), on behalf of
+		// whoever runs `build`; see "Building" in README.md.
 		eula = true
+	}
+}
+
+// Every gametest run starts from a fresh world: the tests record swap rules and leave chunks with
+// saved swap data on disk, so a world kept from an earlier (or aborted) run would change what they see.
+tasks.matching { it.name == "runGameTest" }.configureEach { task ->
+	task.doFirst {
+		delete(new File(task.workingDir, "world"))
 	}
 }
 

@@ -70,6 +70,8 @@ public class DamageBlockSwap implements ModInitializer {
 	// The two small "services" that do the real work. See their own files.
 	private final RandomSwapService randomSwapService = new RandomSwapService();
 	private final WorldSwapService worldSwapService = new WorldSwapService();
+	// The same service, for the gametests (src/gametest, same package), which drive the live pump.
+	private static WorldSwapService activeWorldSwapService;
 
 	// Per-player server-tick of the last swap, for the optional cooldown.
 	private final Map<UUID, Integer> lastSwapTick = new HashMap<>();
@@ -89,6 +91,7 @@ public class DamageBlockSwap implements ModInitializer {
 	@Override
 	public void onInitialize() {
 		Config.load();
+		activeWorldSwapService = worldSwapService;
 		// Saves this tick's new rules. Registered BEFORE worldSwapService's own end-of-tick listener:
 		// listeners of one event run in registration order (Fabric appends them to an array), so the
 		// rules are on disk before the chunk pump of the same tick may apply them.
@@ -134,6 +137,11 @@ public class DamageBlockSwap implements ModInitializer {
 				SwapCommand.register(dispatcher, registry));
 
 		LOGGER.info("Damage Block Swap initialized.");
+	}
+
+	/** The running chunk pump. Package-private, for the gametests only. */
+	static WorldSwapService worldSwapService() {
+		return activeWorldSwapService;
 	}
 
 	/** Drops all per-world runtime state (pending chunk work, player tracking, cooldowns). */
