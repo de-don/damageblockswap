@@ -39,3 +39,5 @@ replay_*.log
 *.hprof
 *.jfr
 .opus/
+docs/opus_review.md
+docs/agent_brief.md

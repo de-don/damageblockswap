@@ -35,6 +35,8 @@ final class SwapJournal<T> {
 	// The composed permutation over all rules, kept up to date in O(1) per rule (for lookups).
 	private final Map<T, T> originalToCurrent = new HashMap<>();
 	private final Map<T, T> currentToOriginal = new HashMap<>();
+	/** Immutable copy for other threads (the map screen runs on the client thread); republished on every change. */
+	private volatile Map<T, T> changesSnapshot = Map.of();
 
 	// compose(0, n) for the last n asked for. Rules are append-only, so a prefix never changes and
 	// the cache only has to be rebuilt when n changes.
@@ -144,6 +146,7 @@ final class SwapJournal<T> {
 		originalToCurrent.put(originalOfB, a);
 		currentToOriginal.put(b, originalOfA);
 		currentToOriginal.put(a, originalOfB);
+		changesSnapshot = computeChanges();
 	}
 
 	/**
@@ -196,12 +199,16 @@ final class SwapJournal<T> {
 
 	/** Every original element that now looks different, with what it looks like (unordered). */
 	Map<T, T> changes() {
+		return changesSnapshot;
+	}
+
+	private Map<T, T> computeChanges() {
 		Map<T, T> changes = new HashMap<>();
 		originalToCurrent.forEach((k, v) -> {
 			if (!k.equals(v)) {
 				changes.put(k, v);
 			}
 		});
-		return changes;
+		return Collections.unmodifiableMap(changes);
 	}
 }

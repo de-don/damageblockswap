@@ -53,6 +53,7 @@ which journal it was swapped by, so it is never swapped twice or by the wrong ru
 - If the file is unreadable it is renamed to `damageblockswap_swaps.json.corrupt-<date>` and a new
   journal starts (with a loud error in the log). Worlds from version 1.0.x are converted
   automatically; the original file is kept as `damageblockswap_swaps.json.v1-backup`.
+- **Downgrading is not supported.** Version 1.0.x cannot read the new journal format and overwrites it with an empty one when the server stops, after which the world's chunks are frozen. **Back up your world before updating.**
 - A journal written by a newer version of the mod is left untouched, and the mod stays inactive
   for that world until you update it.
 

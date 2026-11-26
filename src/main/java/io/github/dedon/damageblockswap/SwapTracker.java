@@ -44,7 +44,7 @@ public final class SwapTracker {
 
 	// The journal and what of it is on disk. Read-only and empty when no world is loaded, or when
 	// the journal file could not be read (then nothing may be written over it).
-	private static JournalStore<Block> store = JournalStore.none(NO_JOURNAL);
+	private static volatile JournalStore<Block> store = JournalStore.none(NO_JOURNAL);
 	private static Path journalPath = null;
 	// Only log the full stack trace of a failing save once per failure streak.
 	private static boolean saveFailing = false;
