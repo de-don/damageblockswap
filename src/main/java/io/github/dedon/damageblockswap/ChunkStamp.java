@@ -34,7 +34,13 @@ final class ChunkStamp {
 		 * Stamped by mod 1.0.x (no id) at a version beyond the rules this journal inherited from
 		 * that version's file (none, if the journal wasn't migrated, e.g. recreated after corruption).
 		 */
-		LEGACY_NOT_ADOPTED
+		LEGACY_NOT_ADOPTED,
+		/**
+		 * The chunk's unfinished swap pass ({@link SwapProgress}) doesn't start at the chunk's stamp
+		 * (chunk data edited by hand or by another tool): which of its blocks are at which version
+		 * is unknown.
+		 */
+		PROGRESS_MISMATCH
 	}
 
 	/** Verdict for one stamp: where the chunk continues from, or why it is quarantined. */

@@ -28,7 +28,10 @@ public final class Config {
 	public static boolean enableLiquids = true;
 	public static boolean enableGravityBlocks = true;
 	public static int cooldownTicks = 0;
-	/** When true, swapped blocks trigger vanilla physics (falling, flowing). Off (default) = much faster. */
+	/**
+	 * When true, swaps use full block updates (neighbours react, unsupported blocks drop). Off (default)
+	 * = much faster, neighbours untouched; the placed block's own behaviour (falling, flowing) stays.
+	 */
 	public static boolean updateNeighbors = false;
 	/** When true, the two swapped block types are chosen from blocks actually near the player. */
 	public static boolean pickFromNearbyChunks = true;
@@ -62,7 +65,7 @@ public final class Config {
 		boolean enableLiquids = true;
 		boolean enableGravityBlocks = true;
 		int cooldownTicks = 0;
-		String _help_updateNeighbors = "Run vanilla physics after swaps (sand falls, water flows). WARNING: with many/common blocks this can cause severe multi-second lag. Leave off unless you know you want it.";
+		String _help_updateNeighbors = "Full vanilla block updates after swaps: neighbouring blocks react (redstone, connections, unsupported blocks break and drop). WARNING: with many/common blocks this can cause severe multi-second lag. Leave off unless you know you want it. Even when off, swapped-in sand/gravel still falls and swapped-in water/lava still flows.";
 		boolean updateNeighbors = false;
 		String _help_pickFromNearbyChunks = "Choose the swapped blocks from ones that actually exist near the player, so hits are always visible.";
 		boolean pickFromNearbyChunks = true;

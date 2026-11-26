@@ -1,0 +1,16 @@
+{
+	"schemaVersion": 1,
+	"id": "damageblockswap-gametest",
+	"version": "1.0.0",
+	"name": "Damage Block Swap gametests",
+	"environment": "*",
+	"entrypoints": {
+		"fabric-gametest": [
+			"io.github.dedon.damageblockswap.ChunkResumeGameTest"
+		]
+	},
+	"depends": {
+		"damageblockswap": "*",
+		"fabric-gametest-api-v1": "*"
+	}
+}

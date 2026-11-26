@@ -58,7 +58,7 @@ final class ClothConfigScreen {
 		general.addEntry(entry.startBooleanToggle(
 						Component.literal("Physics (neighbor updates)"), Config.updateNeighbors)
 				.setDefaultValue(false)
-				.setTooltip(Component.literal("ON: sand falls, water flows after swaps. WARNING: can cause severe multi-second lag with many/common blocks. OFF (default) is smooth."))
+				.setTooltip(Component.literal("ON: full block updates after swaps - neighbouring blocks react, unsupported ones break and drop. WARNING: can cause severe multi-second lag with many/common blocks. OFF (default) is smooth and leaves neighbours alone (swapped-in sand still falls, water still flows)."))
 				.setSaveConsumer(value -> Config.updateNeighbors = value)
 				.build());
 

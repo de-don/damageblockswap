@@ -59,6 +59,14 @@ public class DamageBlockSwap implements ModInitializer {
 	public static final AttachmentType<UUID> JOURNAL_ID = AttachmentRegistry.createPersistent(
 			Identifier.fromNamespaceAndPath(MOD_ID, "journal_id"), UUIDUtil.CODEC);
 
+	/**
+	 * How far an unfinished swap pass over a chunk got (absent when the chunk isn't mid-pass), so a
+	 * chunk saved half-way (unload, autosave, stop, crash) resumes instead of being swapped twice.
+	 * A separate attachment again: older mod versions ignore it. See {@link SwapProgress}.
+	 */
+	public static final AttachmentType<SwapProgress> SWAP_PROGRESS = AttachmentRegistry.createPersistent(
+			Identifier.fromNamespaceAndPath(MOD_ID, "swap_progress"), SwapProgress.CODEC);
+
 	// The two small "services" that do the real work. See their own files.
 	private final RandomSwapService randomSwapService = new RandomSwapService();
 	private final WorldSwapService worldSwapService = new WorldSwapService();

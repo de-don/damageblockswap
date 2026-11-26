@@ -30,6 +30,18 @@ loom {
 	}
 }
 
+// Server gametests (src/gametest): `./gradlew runGameTest`, also run by `check`/`build`. They start a
+// dedicated test server with this mod and check behaviour that needs a real world (chunk save/load).
+fabricApi {
+	configureTests {
+		createSourceSet = true
+		modId = "damageblockswap-gametest"
+		enableGameTests = true
+		enableClientGameTests = false
+		eula = true
+	}
+}
+
 dependencies {
 	// To change the versions see the gradle.properties file
 	minecraft "com.mojang:minecraft:${project.minecraft_version}"

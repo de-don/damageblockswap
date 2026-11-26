@@ -20,10 +20,16 @@ date a little at a time:
 
 Every chunk remembers which rule version it has been brought to (a persistent stamp), so rules
 are never applied twice, and the work is throttled to a few milliseconds per tick so the server
-stays responsive no matter how large the swap.
+stays responsive no matter how large the swap. Chunks closest to a player are done first. A chunk
+that is unloaded or saved half-way through also remembers how far it got, and carries on from
+there when it loads again. A chunk is only changed while all 8 chunks around it are loaded, so
+the mod never makes the server load or generate terrain on its own; chunks at the very edge of
+the loaded area catch up once you get closer.
 
 Blocks that can't survive where they'd be placed (rails, torches, flowers, redstone…) are left
-alone instead of popping off as dropped items. Blocks that store data — chests, furnaces, signs,
+alone instead of popping off as dropped items. With `updateNeighbors` off (the default), blocks
+next to a swapped block are not reshaped or broken either (a torch stays on a wall that became
+water). Blocks that store data — chests, furnaces, signs,
 shulker boxes, spawners, and anything else with a block entity — are never swapped, so your
 inventories and builds are safe.
 
@@ -76,7 +82,7 @@ automatically when you update the mod). Edit it directly or use the in-game scre
 | `swapsPerHit` | `1` | How many rules a single hit adds (1–100). |
 | `swapRadius` | `3` | Area of effect around the player, in chunks (1–16). Bigger = more of the world changes at once, but heavier. |
 | `pickFromNearbyChunks` | `true` | Pick the swapped blocks from ones that actually exist around you, so hits are always visible. |
-| `updateNeighbors` | `false` | Run vanilla physics after swaps (sand falls, water flows). **Can cause severe lag** with many/common blocks — leave off unless you want it. |
+| `updateNeighbors` | `false` | Full vanilla block updates after swaps: neighbouring blocks react (redstone, connections, unsupported blocks break and drop). **Can cause severe lag** with many/common blocks — leave off unless you want it. Note that even when off, a swapped-in falling block (sand, gravel) still falls and swapped-in water/lava still flows — that is the block itself, not its neighbours. |
 | `enableLiquids` | `true` | Allow water and lava to be swapped. |
 | `enableGravityBlocks` | `true` | Allow sand, gravel and other falling blocks to be swapped. |
 | `cooldownTicks` | `0` | Minimum ticks between swaps (20 = 1 second). 0 = no cooldown. |

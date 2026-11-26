@@ -77,38 +77,44 @@ public final class SwapTracker {
 		return store.record(JournalFile.RawRule.of(idOf(a), idOf(b)), a, b);
 	}
 
-	/**
-	 * "Block as of version {@code fromVersion}" -> "block as of {@code toVersion}", so a chunk that
-	 * is behind can catch up in one pass. Unknown-block placeholders are no-ops.
-	 */
-	public static Map<Block, Block> mappingBetween(int fromVersion, int toVersion) {
-		return store.journal().mapping(fromVersion, toVersion);
-	}
-
-	// --- Chunk stamps --------------------------------------------------------------------------
+	// --- Chunk stamps and unfinished passes ----------------------------------------------------
 
 	/**
-	 * The version this chunk is at relative to the current journal, or {@link ChunkStamp#QUARANTINED}
-	 * if it was stamped by another journal (or is ahead of it) and must not be touched.
+	 * What this chunk needs, from its stamp and its unfinished pass (if any): nothing, a pass up to
+	 * {@link #persistedVersion()} (or the rest of the unfinished one), or to be left alone because it
+	 * was stamped by another journal / beyond it (quarantine; logged once per kind of problem).
 	 */
-	public static int chunkStartVersion(LevelChunk chunk) {
+	public static ChunkJob.Plan planChunk(LevelChunk chunk) {
 		int stampVersion = chunk.getAttachedOrElse(DamageBlockSwap.APPLIED_VERSION, 0);
 		UUID stampId = chunk.getAttached(DamageBlockSwap.JOURNAL_ID);
-		ChunkStamp.Result result = store.evaluateStamp(stampId, stampVersion);
+		SwapProgress progress = chunk.getAttached(DamageBlockSwap.SWAP_PROGRESS);
+		ChunkJob.Plan plan = ChunkJob.plan(store, stampId, stampVersion, progress);
 		// When the journal is unreadable, everything is skipped and that's logged once at load.
-		if (result.isQuarantined() && store.writable()) {
-			warnQuarantined(chunk, result.problem(), stampId, stampVersion);
+		if (plan.isQuarantined() && store.writable()) {
+			warnQuarantined(chunk, plan.problem(), plan.problemId(), plan.problemVersion());
 		}
-		return result.startVersion();
+		return plan;
+	}
+
+	/** Starts (or resumes) the pass {@code plan} describes on {@code chunk}. */
+	public static ChunkJob<Block> startJob(ChunkJob.ChunkData<Block> chunk, ChunkJob.Plan plan) {
+		return ChunkJob.start(store, chunk, plan);
 	}
 
 	/**
-	 * Marks a chunk as brought up to {@code version} (at most {@link #persistedVersion()}) of the
-	 * journal on disk.
+	 * Marks a chunk as brought up to {@code version} of journal {@code journalId} and drops its
+	 * unfinished-pass record. Only {@link ChunkJob} calls this, with the id on disk and at most
+	 * {@link #persistedVersion()}.
 	 */
-	public static void stampChunk(LevelChunk chunk, int version) {
+	public static void writeStamp(LevelChunk chunk, UUID journalId, int version) {
 		chunk.setAttached(DamageBlockSwap.APPLIED_VERSION, version);
-		chunk.setAttached(DamageBlockSwap.JOURNAL_ID, store.stampId());
+		chunk.setAttached(DamageBlockSwap.JOURNAL_ID, journalId);
+		chunk.removeAttached(DamageBlockSwap.SWAP_PROGRESS);
+	}
+
+	/** Saves how far an unfinished pass got (with the chunk, so it is resumed after a reload). */
+	public static void writeProgress(LevelChunk chunk, SwapProgress progress) {
+		chunk.setAttached(DamageBlockSwap.SWAP_PROGRESS, progress);
 	}
 
 	private static void warnQuarantined(LevelChunk chunk, ChunkStamp.Problem problem, UUID stampId, int stampVersion) {
@@ -126,6 +132,9 @@ public final class SwapTracker {
 			case LEGACY_NOT_ADOPTED -> "it was swapped by an older mod version up to rule " + stampVersion
 					+ ", but the current journal only inherited " + journal.legacyRuleCount()
 					+ " rules from that version (journal recreated, or rules lost in a crash)";
+			case PROGRESS_MISMATCH -> "its record of an unfinished swap pass (up to rule " + stampVersion
+					+ " of journal " + stampId + ") doesn't start where its stamp is (chunk data edited "
+					+ "outside the game?), so which of its blocks are swapped is unknown";
 		};
 		DamageBlockSwap.LOGGER.warn("Leaving chunk {} untouched: {}. Such chunks are never swapped again by this "
 						+ "journal; further ones with the same problem are skipped silently. Current journal: {} "
