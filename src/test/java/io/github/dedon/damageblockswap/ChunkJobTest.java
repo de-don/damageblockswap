@@ -343,9 +343,52 @@ class ChunkJobTest {
 		ChunkJob.Plan plan = ChunkJob.plan(store, id, 1, new SwapProgress(id, 0, 2, 100));
 		assertEquals(PROGRESS_MISMATCH, plan.problem());
 		assertFalse(plan.hasWork());
+		assertFalse(plan.staleProgress());
 
-		assertEquals(PROGRESS_MISMATCH, ChunkJob.plan(store, id, 1, new SwapProgress(id, 1, 1, 0)).problem());
 		assertEquals(PROGRESS_MISMATCH, ChunkJob.plan(store, id, 0, new SwapProgress(id, 0, 2, -5)).problem());
+		assertEquals(PROGRESS_MISMATCH, ChunkJob.plan(store, id, 1, new SwapProgress(id, 1, 0, 0)).problem());
+		// A record whose target is behind the stamp isn't "the pass the stamp finished" either.
+		assertEquals(PROGRESS_MISMATCH, ChunkJob.plan(store, id, 2, new SwapProgress(id, 0, 1, 0)).problem());
+	}
+
+	@Test
+	void progressWhoseTargetIsTheStampIsAFinishedPassAndIsDropped() throws Exception {
+		JournalStore<String> store = newStore();
+		addSavedRule(store, "a", "b");
+		UUID id = store.stampId();
+
+		// from == to == stamp (review_3 minor 9), and a full record of the pass 0 -> 1 next to stamp 1:
+		// both say the chunk is at the stamp, so it is up to date and the record goes.
+		for (SwapProgress leftOver : new SwapProgress[]{new SwapProgress(id, 1, 1, 0), new SwapProgress(id, 0, 1, 77)}) {
+			ChunkJob.Plan plan = ChunkJob.plan(store, id, 1, leftOver);
+			assertFalse(plan.isQuarantined(), leftOver.toString());
+			assertFalse(plan.hasWork(), leftOver.toString());
+			assertTrue(plan.staleProgress(), leftOver.toString());
+		}
+
+		// Rules saved since: a new pass from the stamp, from cell 0, and the record still goes.
+		addSavedRule(store, "c", "d");
+		ChunkJob.Plan plan = ChunkJob.plan(store, id, 1, new SwapProgress(id, 0, 1, 77));
+		assertTrue(plan.hasWork());
+		assertEquals(1, plan.from());
+		assertEquals(2, plan.to());
+		assertEquals(0, plan.position());
+		assertTrue(plan.staleProgress());
+
+		// A real unfinished pass is not stale.
+		assertFalse(ChunkJob.plan(store, id, 1, new SwapProgress(id, 1, 2, 5)).staleProgress());
+		assertFalse(ChunkJob.plan(store, id, 1, null).staleProgress());
+	}
+
+	@Test
+	void finishedPassRecordFromAnotherJournalIsStillQuarantined() throws Exception {
+		JournalStore<String> store = newStore();
+		addSavedRule(store, "a", "b");
+		UUID id = store.stampId();
+		// The record's target is checked like a stamp before anything else.
+		ChunkJob.Plan plan = ChunkJob.plan(store, id, 1, new SwapProgress(UUID.randomUUID(), 1, 1, 0));
+		assertEquals(OTHER_JOURNAL, plan.problem());
+		assertFalse(plan.staleProgress());
 	}
 
 	@Test

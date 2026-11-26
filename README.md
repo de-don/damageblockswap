@@ -23,8 +23,10 @@ are never applied twice, and the work is throttled to a few milliseconds per tic
 stays responsive no matter how large the swap. Chunks closest to a player are done first. A chunk
 that is unloaded or saved half-way through also remembers how far it got, and carries on from
 there when it loads again. A chunk is only changed while all 8 chunks around it are loaded, so
-the mod never makes the server load or generate terrain on its own; chunks at the very edge of
-the loaded area catch up once you get closer.
+with `updateNeighbors` off (the default) the mod never makes the server load or generate terrain
+on its own; chunks at the very edge of the loaded area catch up once you get closer. With
+`updateNeighbors` on, a chain of block updates (redstone, flowing water…) can still reach past
+those 8 chunks and load the chunk it runs into, as any vanilla block update would.
 
 Blocks that can't survive where they'd be placed (rails, torches, flowers, redstone…) are left
 alone instead of popping off as dropped items. With `updateNeighbors` off (the default), blocks
@@ -108,7 +110,12 @@ Pressing it opens a scrollable list of every swap so far. Requires Cloth Config;
 ./gradlew build
 ```
 
-The built jar is in `build/libs/`. To try it in a dev client/server:
+The built jar is in `build/libs/`. `build` also runs the gametests (`runGameTest`): it starts a
+throw-away test server in `build/run/gameTest` (its world is deleted before every run) and, for
+that, **accepts the [Minecraft EULA](https://aka.ms/MinecraftEULA) on your behalf**
+(`eula = true` in `build.gradle`). If you don't accept it, run `./gradlew build -x runGameTest`.
+
+To try it in a dev client/server:
 
 ```sh
 ./gradlew runClient
