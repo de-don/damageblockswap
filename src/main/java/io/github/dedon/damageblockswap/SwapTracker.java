@@ -24,13 +24,16 @@ import java.util.UUID;
  * id and the version it has been brought up to; when it is behind, just the missing rules are
  * applied to it.
  *
- * <p>Safety rules (see {@code docs/decisions.md}, item 2/5):
+ * <p>Safety rules (see {@code docs/decisions.md}, item 2/5); the logic lives in the pure, unit-tested
+ * {@link JournalStore}, {@link SwapJournal}, {@link JournalFile} and {@link ChunkStamp}:
  * <ul>
  *   <li>Chunks are only ever advanced up to {@link #persistedVersion()}, the rules known to be on
- *       disk. So a crash can never leave a chunk stamped with a version the journal file lacks.</li>
- *   <li>The file is written atomically, right after rules are added ({@link #flush()}).</li>
+ *       disk, and stamped with the id on disk. So a crash can never leave a chunk stamped with a
+ *       version the journal file lacks.</li>
+ *   <li>The file is written atomically, at the end of the tick in which rules were added ({@link #flush()}).</li>
  *   <li>Rules referring to unknown blocks stay in place as no-op placeholders; indices never shift.</li>
- *   <li>A chunk stamped by a different journal is left alone (quarantined), see {@link ChunkStamp}.</li>
+ *   <li>A chunk stamped by a different journal, or beyond what its journal had, is left alone
+ *       (quarantined) for good, see {@link ChunkStamp}.</li>
  * </ul>
  *
  * <p>Everything is global and only touched from the server thread.
@@ -39,14 +42,10 @@ public final class SwapTracker {
 	private static final String FILE_NAME = DamageBlockSwap.MOD_ID + "_swaps.json";
 	private static final UUID NO_JOURNAL = new UUID(0L, 0L);
 
-	private static SwapJournal<Block> journal = new SwapJournal<>(NO_JOURNAL, 0);
-	// Where the journal lives; null when no world is loaded.
+	// The journal and what of it is on disk. Read-only and empty when no world is loaded, or when
+	// the journal file could not be read (then nothing may be written over it).
+	private static JournalStore<Block> store = JournalStore.none(NO_JOURNAL);
 	private static Path journalPath = null;
-	// How many rules are safely on disk. Chunks are never advanced beyond this.
-	private static int persistedVersion = 0;
-	// False when no world is loaded, or the journal file could not be read (then nothing may be
-	// written over it and no rules are recorded).
-	private static boolean writable = false;
 	// Only log the full stack trace of a failing save once per failure streak.
 	private static boolean saveFailing = false;
 	// Quarantine warnings already printed this session (one per kind of problem and journal id).
@@ -57,17 +56,17 @@ public final class SwapTracker {
 
 	/** Number of rules recorded so far (including any not yet saved). */
 	public static int version() {
-		return journal.version();
+		return store.journal().version();
 	}
 
 	/** Number of rules known to be on disk. Chunks are brought up to this version, never further. */
 	public static int persistedVersion() {
-		return persistedVersion;
+		return store.persistedVersion();
 	}
 
 	/** Whether new rules may be recorded (a world is loaded and its journal file is usable). */
 	public static boolean canRecord() {
-		return writable;
+		return store.writable();
 	}
 
 	/**
@@ -75,11 +74,7 @@ public final class SwapTracker {
 	 * afterwards; chunks only see the rule once it is on disk. Returns false if recording is disabled.
 	 */
 	public static boolean recordSwap(Block a, Block b) {
-		if (!writable) {
-			return false;
-		}
-		journal.append(JournalFile.RawRule.of(idOf(a), idOf(b)), a, b);
-		return true;
+		return store.record(JournalFile.RawRule.of(idOf(a), idOf(b)), a, b);
 	}
 
 	/**
@@ -87,7 +82,7 @@ public final class SwapTracker {
 	 * is behind can catch up in one pass. Unknown-block placeholders are no-ops.
 	 */
 	public static Map<Block, Block> mappingBetween(int fromVersion, int toVersion) {
-		return journal.mapping(fromVersion, toVersion);
+		return store.journal().mapping(fromVersion, toVersion);
 	}
 
 	// --- Chunk stamps --------------------------------------------------------------------------
@@ -99,21 +94,21 @@ public final class SwapTracker {
 	public static int chunkStartVersion(LevelChunk chunk) {
 		int stampVersion = chunk.getAttachedOrElse(DamageBlockSwap.APPLIED_VERSION, 0);
 		UUID stampId = chunk.getAttached(DamageBlockSwap.JOURNAL_ID);
-		ChunkStamp.Problem problem = ChunkStamp.problem(stampId, stampVersion, journal.id(), persistedVersion,
-				journal.legacyRuleCount());
-		if (problem == null) {
-			return Math.max(0, stampVersion);
+		ChunkStamp.Result result = store.evaluateStamp(stampId, stampVersion);
+		// When the journal is unreadable, everything is skipped and that's logged once at load.
+		if (result.isQuarantined() && store.writable()) {
+			warnQuarantined(chunk, result.problem(), stampId, stampVersion);
 		}
-		if (writable) { // when the journal is unreadable, everything is skipped and that's logged once at load
-			warnQuarantined(chunk, problem, stampId, stampVersion);
-		}
-		return ChunkStamp.QUARANTINED;
+		return result.startVersion();
 	}
 
-	/** Marks a chunk as brought up to {@code version} of the current journal. */
+	/**
+	 * Marks a chunk as brought up to {@code version} (at most {@link #persistedVersion()}) of the
+	 * journal on disk.
+	 */
 	public static void stampChunk(LevelChunk chunk, int version) {
 		chunk.setAttached(DamageBlockSwap.APPLIED_VERSION, version);
-		chunk.setAttached(DamageBlockSwap.JOURNAL_ID, journal.id());
+		chunk.setAttached(DamageBlockSwap.JOURNAL_ID, store.stampId());
 	}
 
 	private static void warnQuarantined(LevelChunk chunk, ChunkStamp.Problem problem, UUID stampId, int stampVersion) {
@@ -121,34 +116,37 @@ public final class SwapTracker {
 		if (!quarantineWarnings.add(key)) {
 			return;
 		}
+		SwapJournal<Block> journal = store.journal();
 		String why = switch (problem) {
 			case OTHER_JOURNAL -> "it was swapped under a different journal (" + stampId
-					+ "), e.g. the journal file was replaced or recreated after corruption";
-			case AHEAD_OF_JOURNAL -> "it is stamped with version " + stampVersion
-					+ ", but the journal only has " + persistedVersion + " saved rules (rules were lost)";
+					+ "), e.g. the journal file was replaced, deleted or recreated after corruption";
+			case AHEAD_OF_JOURNAL -> "it is stamped with rule " + stampVersion + " of journal " + stampId
+					+ ", which the journal file never had (rules lost: the file was restored from an older copy "
+					+ "than the world, or lost in a crash)";
 			case LEGACY_NOT_ADOPTED -> "it was swapped by an older mod version up to rule " + stampVersion
 					+ ", but the current journal only inherited " + journal.legacyRuleCount()
 					+ " rules from that version (journal recreated, or rules lost in a crash)";
 		};
-		DamageBlockSwap.LOGGER.warn("Leaving chunk {} untouched: {}. Further chunks with the same problem are "
-						+ "skipped silently. Current journal: {} ({} rules). If you restore the matching journal file, "
-						+ "these chunks will catch up again.",
-				chunk.getPos(), why, journal.id(), persistedVersion);
+		DamageBlockSwap.LOGGER.warn("Leaving chunk {} untouched: {}. Such chunks are never swapped again by this "
+						+ "journal; further ones with the same problem are skipped silently. Current journal: {} "
+						+ "({} saved rules). If the right journal file still exists, restore it with the server "
+						+ "stopped and before new swaps happen, and these chunks will catch up.",
+				chunk.getPos(), why, journal.id(), store.persistedVersion());
 	}
 
 	// --- Lookup helpers for /dbs and the screen ------------------------------------------------
 
 	public static Block currentAppearanceOf(Block original) {
-		return journal.currentAppearanceOf(original);
+		return store.journal().currentAppearanceOf(original);
 	}
 
 	public static Block originalOf(Block current) {
-		return journal.originalOf(current);
+		return store.journal().originalOf(current);
 	}
 
 	public static Map<Block, Block> allChanges() {
 		Map<Block, Block> changes = new LinkedHashMap<>();
-		journal.changes().entrySet().stream()
+		store.journal().changes().entrySet().stream()
 				.sorted((x, y) -> idOf(x.getKey()).compareTo(idOf(y.getKey())))
 				.forEach(e -> changes.put(e.getKey(), e.getValue()));
 		return changes;
@@ -156,10 +154,8 @@ public final class SwapTracker {
 
 	/** Forgets the rule book entirely (once the world is closed). Never writes anything. */
 	public static void clear() {
-		journal = new SwapJournal<>(NO_JOURNAL, 0);
+		store = JournalStore.none(NO_JOURNAL);
 		journalPath = null;
-		persistedVersion = 0;
-		writable = false;
 		saveFailing = false;
 		quarantineWarnings.clear();
 	}
@@ -171,20 +167,29 @@ public final class SwapTracker {
 		Path path = server.getWorldPath(LevelResource.ROOT).resolve(FILE_NAME);
 		JournalFile.LoadResult result = JournalFile.load(path, UUID::randomUUID, Clock.systemUTC());
 
-		journal = SwapJournal.fromContents(result.contents(), SwapTracker::blockFromId);
+		SwapJournal<Block> journal = SwapJournal.fromContents(result.contents(), SwapTracker::blockFromId);
+		store = new JournalStore<>(journal, result.status(), path, UUID::randomUUID, JournalFile::writeAtomically);
 		journalPath = path;
-		writable = result.status() != JournalFile.Status.UNREADABLE;
-		persistedVersion = writable ? journal.version() : 0;
 
 		switch (result.status()) {
 			case NEW -> DamageBlockSwap.LOGGER.info("No swap journal yet; starting journal {}.", journal.id());
 			case LOADED -> DamageBlockSwap.LOGGER.info("Loaded swap journal {}: version {}.",
 					journal.id(), journal.version());
 			case MIGRATED -> {
-				DamageBlockSwap.LOGGER.info("Migrated swap journal from the old format: version {}, journal id {}. "
-						+ "A copy of the old file was kept at {}.", journal.version(), journal.id(), result.backup());
+				if (result.backup() != null) {
+					DamageBlockSwap.LOGGER.info("Migrated swap journal from the old format: version {}, journal id {}. "
+							+ "A copy of the old file was kept at {}.", journal.version(), journal.id(), result.backup());
+				} else {
+					DamageBlockSwap.LOGGER.info("Read swap journal in the old format: version {}, journal id {}.",
+							journal.version(), journal.id());
+				}
+				if (result.contents().note() != null) {
+					DamageBlockSwap.LOGGER.warn("Swap journal {}: {}.", path, result.contents().note());
+				}
 				if (result.detail() != null) {
-					DamageBlockSwap.LOGGER.warn("Swap journal {}: {}. Will retry on the next save.", path, result.detail());
+					DamageBlockSwap.LOGGER.warn("Swap journal {}: {}. The old file is still in place; it will be written "
+							+ "in the new format on the next save{}.", path, result.detail(),
+							result.backup() == null ? " (no backup copy of the old format will exist)" : "");
 				}
 			}
 			case RECOVERED_FROM_CORRUPT -> DamageBlockSwap.LOGGER.error("""
@@ -206,7 +211,7 @@ public final class SwapTracker {
 					* Damage Block Swap: the swap journal could not be read:
 					*   {}
 					* The mod is DISABLED for this session: no new swaps, no chunk updates, and
-					* the file will not be touched. Fix the problem (permissions, disk) and restart.
+					* the file will not be touched. Fix the problem above and restart.
 					******************************************************************************""",
 					result.detail());
 		}
@@ -221,21 +226,20 @@ public final class SwapTracker {
 
 	/**
 	 * Writes the journal if it has unsaved rules. Returns true if everything is on disk afterwards.
-	 * Called right after rules are added, periodically (as a retry) and when the server stops.
+	 * Called at the end of a tick in which rules were added, periodically (as a retry) and when the
+	 * server stops.
 	 */
 	public static boolean flush() {
-		if (journal.version() == persistedVersion) {
+		if (!store.dirty()) {
 			return true;
 		}
-		if (!writable || journalPath == null) {
+		if (!store.writable()) {
 			return false;
 		}
 		try {
-			JournalFile.writeAtomically(journalPath,
-					JournalFile.serialize(journal.id(), journal.legacyRuleCount(), journal.rawRules()));
-			persistedVersion = journal.version();
+			store.flush();
 			if (saveFailing) {
-				DamageBlockSwap.LOGGER.info("Swap journal saved again ({} rules).", persistedVersion);
+				DamageBlockSwap.LOGGER.info("Swap journal saved again ({} rules).", store.persistedVersion());
 			}
 			saveFailing = false;
 			return true;
@@ -256,8 +260,8 @@ public final class SwapTracker {
 	 * on disk before (so chunks can now catch up to them).
 	 */
 	public static boolean saveIfDirty() {
-		int before = persistedVersion;
-		return journal.version() != before && flush() && persistedVersion > before;
+		int before = store.persistedVersion();
+		return store.dirty() && flush() && store.persistedVersion() > before;
 	}
 
 	private static String idOf(Block block) {

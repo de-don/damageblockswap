@@ -3,6 +3,7 @@ package io.github.dedon.damageblockswap;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -25,8 +26,10 @@ final class SwapJournal<T> {
 		}
 	}
 
-	private final UUID id;
+	private UUID id;
 	private final int legacyRuleCount;
+	// Ids this journal continues (oldest first), each trusted up to the rule count it had then.
+	private final Map<UUID, Integer> previousIds = new LinkedHashMap<>();
 	private final List<Entry<T>> entries = new ArrayList<>();
 
 	// The composed permutation over all rules, kept up to date in O(1) per rule (for lookups).
@@ -39,13 +42,19 @@ final class SwapJournal<T> {
 	private int prefixCacheTo = -1;
 
 	SwapJournal(UUID id, int legacyRuleCount) {
+		this(id, legacyRuleCount, Map.of());
+	}
+
+	SwapJournal(UUID id, int legacyRuleCount, Map<UUID, Integer> previousIds) {
 		this.id = id;
 		this.legacyRuleCount = legacyRuleCount;
+		this.previousIds.putAll(previousIds);
 	}
 
 	/** Builds a journal from file contents; {@code resolver} returns null for unknown ids. */
 	static <T> SwapJournal<T> fromContents(JournalFile.Contents contents, Function<String, T> resolver) {
-		SwapJournal<T> journal = new SwapJournal<>(contents.journalId(), contents.legacyRuleCount());
+		SwapJournal<T> journal = new SwapJournal<>(contents.journalId(), contents.legacyRuleCount(),
+				contents.previousIds());
 		for (JournalFile.RawRule raw : contents.rules()) {
 			T a = raw.wellFormed() ? resolver.apply(raw.a()) : null;
 			T b = raw.wellFormed() ? resolver.apply(raw.b()) : null;
@@ -65,6 +74,35 @@ final class SwapJournal<T> {
 
 	UUID id() {
 		return id;
+	}
+
+	/**
+	 * Continues this journal under {@code newId}. The old id stays trusted for chunk stamps, but only
+	 * up to the current rule count: rules added from now on are only known under the new id.
+	 *
+	 * <p>Why: if the journal file is ever restored from an older copy, chunks in the world can carry
+	 * stamps of the old id beyond what the restored file has. Without a new id, the next rules added
+	 * would bring the count back up to those stamps and the chunks would be silently accepted with a
+	 * history they don't have. With it, such stamps stay quarantined for good.
+	 */
+	void startNewId(UUID newId) {
+		if (newId.equals(id)) {
+			throw new IllegalArgumentException("new journal id must differ from the current one");
+		}
+		if (version() > 0) { // a stamp at version 0 is "untouched" anyway, no need to remember it
+			previousIds.merge(id, version(), Math::max);
+		}
+		id = newId;
+	}
+
+	/** Ids this journal continues, oldest first, each with the rule count it is trusted up to. */
+	Map<UUID, Integer> previousIds() {
+		return Collections.unmodifiableMap(previousIds);
+	}
+
+	/** What a chunk stamp means for this journal, given how many of its rules are on disk. */
+	ChunkStamp.Result evaluateStamp(UUID stampId, int stampVersion, int persistedVersion) {
+		return ChunkStamp.evaluate(stampId, stampVersion, id, persistedVersion, legacyRuleCount, previousIds);
 	}
 
 	/**

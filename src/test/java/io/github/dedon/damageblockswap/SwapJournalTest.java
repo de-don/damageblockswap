@@ -12,6 +12,7 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** Composition of the swap rules (transpositions), with placeholders, against a brute-force model. */
@@ -151,11 +152,11 @@ class SwapJournalTest {
 
 	@Test
 	void fromContentsResolvesUnknownIdsToPlaceholdersInPlace() {
-		JournalFile.Contents contents = new JournalFile.Contents(UUID.randomUUID(), 0, List.of(
+		JournalFile.Contents contents = new JournalFile.Contents(UUID.randomUUID(), 0, Map.of(), List.of(
 				JournalFile.RawRule.of("a", "b"),
 				JournalFile.RawRule.of("a", "removedmod:ore"),
 				new JournalFile.RawRule(null, null, new JsonPrimitive(5)),
-				JournalFile.RawRule.of("b", "c")), false);
+				JournalFile.RawRule.of("b", "c")), false, null);
 		SwapJournal<String> j = SwapJournal.fromContents(contents, id -> id.contains(":") ? null : id);
 
 		assertEquals(4, j.version());
@@ -163,6 +164,26 @@ class SwapJournalTest {
 		assertEquals(contents.rules(), j.rawRules());
 		// Rule 3 (b <-> c) is still rule 3, so a chunk stamped at version 3 gets exactly it.
 		assertEquals(Map.of("b", "c", "c", "b"), j.mapping(3, 4));
+	}
+
+	@Test
+	void newIdKeepsTheOldOneTrustedUpToTheCurrentRuleCountOnly() {
+		UUID first = UUID.fromString("11111111-1111-1111-1111-111111111111");
+		UUID second = UUID.fromString("22222222-2222-2222-2222-222222222222");
+		UUID third = UUID.fromString("33333333-3333-3333-3333-333333333333");
+		SwapJournal<String> j = new SwapJournal<>(first, 0);
+		j.startNewId(second); // no rules yet: nothing to remember
+		assertTrue(j.previousIds().isEmpty());
+		add(j, "a", "b");
+		add(j, "b", "c");
+		j.startNewId(third);
+		assertEquals(third, j.id());
+		assertEquals(Map.of(second, 2), j.previousIds());
+		add(j, "c", "d");
+		assertEquals(2, j.evaluateStamp(second, 2, 3).startVersion());
+		assertTrue(j.evaluateStamp(second, 3, 3).isQuarantined());
+		assertEquals(3, j.evaluateStamp(third, 3, 3).startVersion());
+		assertThrows(IllegalArgumentException.class, () -> j.startNewId(third));
 	}
 
 	@Test

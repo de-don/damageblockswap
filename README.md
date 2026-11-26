@@ -30,6 +30,24 @@ inventories and builds are safe.
 Newly placed or physics-generated blocks (a block you place, cobblestone from lava + water, etc.)
 are **not** retroactively swapped — only future rules that target their type will affect them.
 
+### The swap journal file
+
+The rule book lives in your world folder as `damageblockswap_swaps.json`. Each chunk remembers
+which journal it was swapped by, so it is never swapped twice or by the wrong rules:
+
+- **Deleting the file does not undo or reset the swaps.** The blocks in already-swapped chunks
+  stay as they are, and those chunks are *frozen*: a new journal starts, and its rules are only
+  applied to chunks it hasn't touched yet (fresh terrain, unvisited areas). Putting the old file
+  back (with the server stopped) unfreezes them — but then the chunks the new journal swapped in
+  the meantime are frozen instead, so do it before any new swaps happen.
+- Restoring an **older copy** of the file freezes chunks that were swapped by rules the copy
+  doesn't have; the rest of the world carries on normally.
+- If the file is unreadable it is renamed to `damageblockswap_swaps.json.corrupt-<date>` and a new
+  journal starts (with a loud error in the log). Worlds from version 1.0.x are converted
+  automatically; the original file is kept as `damageblockswap_swaps.json.v1-backup`.
+- A journal written by a newer version of the mod is left untouched, and the mod stays inactive
+  for that world until you update it.
+
 ## Requirements
 
 - Minecraft **26.1.2**

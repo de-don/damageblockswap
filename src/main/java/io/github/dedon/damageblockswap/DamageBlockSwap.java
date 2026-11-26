@@ -26,6 +26,7 @@ import net.minecraft.world.level.block.Block;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -65,13 +66,25 @@ public class DamageBlockSwap implements ModInitializer {
 	// Per-player server-tick of the last swap, for the optional cooldown.
 	private final Map<UUID, Integer> lastSwapTick = new HashMap<>();
 
-	// The rule book is written right after every hit that adds rules. If that write failed, it is
-	// retried this often (in ticks); until then the new rules are not applied to any chunk.
+	/** A hit that added rules this tick; shown (chat + area refresh) once the rules are on disk. */
+	private record PendingHit(Player player, ServerLevel level, int chunkX, int chunkZ,
+	                          List<RandomSwapService.BlockPair> pairs) {
+	}
+
+	// Hits of the current tick. Their rules are written once, together, at the end of the tick.
+	private final List<PendingHit> pendingHits = new ArrayList<>();
+
+	// The rule book is written at the end of every tick in which hits added rules. If that write
+	// failed, it is retried this often (in ticks); until then the new rules are not applied anywhere.
 	private static final int SAVE_RETRY_INTERVAL_TICKS = 200; // ~10 seconds
 
 	@Override
 	public void onInitialize() {
 		Config.load();
+		// Saves this tick's new rules. Registered BEFORE worldSwapService's own end-of-tick listener:
+		// listeners of one event run in registration order (Fabric appends them to an array), so the
+		// rules are on disk before the chunk pump of the same tick may apply them.
+		ServerTickEvents.END_SERVER_TICK.register(this::saveNewRules);
 		worldSwapService.registerEvents(); // catches chunks up to the rule book, a little each tick
 
 		// Fires AFTER a living entity has taken damage. Parameters:
@@ -85,17 +98,11 @@ public class DamageBlockSwap implements ModInitializer {
 		// The rule book is saved inside the world folder, so load/save it with the world.
 		// Load on SERVER_STARTING (before the levels and their spawn chunks are loaded), so the
 		// CHUNK_LOAD checks of those first chunks already compare against this world's rule book
-		// and not the previous world's. New rules are written as soon as they are added (see
-		// onEntityDamaged); the periodic task below only retries a write that failed.
+		// and not the previous world's. New rules are written at the end of the tick they were added
+		// in (saveNewRules), which also retries a write that failed.
 		ServerLifecycleEvents.SERVER_STARTING.register(server -> {
 			resetSessionState(); // in case a previous server didn't shut down cleanly
 			SwapTracker.load(server);
-		});
-		ServerTickEvents.END_SERVER_TICK.register(server -> {
-			if (server.getTickCount() % SAVE_RETRY_INTERVAL_TICKS == 0 && SwapTracker.saveIfDirty()) {
-				// Rules that were stuck in memory are on disk now, so chunks may catch up to them.
-				worldSwapService.refreshAroundAllPlayers();
-			}
 		});
 		ServerLifecycleEvents.SERVER_STOPPING.register(server -> {
 			SwapTracker.flush();
@@ -125,6 +132,51 @@ public class DamageBlockSwap implements ModInitializer {
 	private void resetSessionState() {
 		worldSwapService.reset();
 		lastSwapTick.clear();
+		pendingHits.clear();
+	}
+
+	/**
+	 * End of tick: puts the rules added by this tick's hits on disk in one write (one write per tick
+	 * however many players got hurt), and only then announces them and refreshes the area around the
+	 * hit players. Chunks are only ever advanced to the saved version, so if the write fails nothing in
+	 * the world changes, nothing is announced, and a crash can't leave chunks ahead of the journal
+	 * file. A failed write is retried every {@link #SAVE_RETRY_INTERVAL_TICKS}.
+	 */
+	private void saveNewRules(MinecraftServer server) {
+		if (pendingHits.isEmpty()) {
+			if (server.getTickCount() % SAVE_RETRY_INTERVAL_TICKS == 0 && SwapTracker.saveIfDirty()) {
+				// Rules that were stuck in memory are on disk now, so chunks may catch up to them.
+				worldSwapService.refreshAroundAllPlayers();
+			}
+			return;
+		}
+
+		List<PendingHit> hits = List.copyOf(pendingHits);
+		pendingHits.clear();
+		int savedBefore = SwapTracker.persistedVersion();
+		int addedThisTick = 0;
+		for (PendingHit hit : hits) {
+			addedThisTick += hit.pairs().size();
+		}
+		if (!SwapTracker.flush()) {
+			return; // logged; the rules stay in memory, unapplied and unannounced, until a retry works
+		}
+		if (SwapTracker.persistedVersion() - savedBefore > addedThisTick) {
+			worldSwapService.refreshAroundAllPlayers(); // older rules that had been stuck got saved too
+		}
+		for (PendingHit hit : hits) {
+			for (RandomSwapService.BlockPair pair : hit.pairs()) {
+				announce(hit.player(), pair);
+			}
+			// Refresh the loaded area around the player now; as the player moves, more chunks catch up,
+			// and brand-new chunks catch up when they load. Everything is throttled per tick.
+			worldSwapService.onHit(hit.level(), hit.chunkX(), hit.chunkZ());
+			if (Config.logging) {
+				LOGGER.info("Player {} took damage. Added {} rule(s), version now {}, {} chunks queued.",
+						hit.player().getName().getString(), hit.pairs().size(), SwapTracker.version(),
+						worldSwapService.queueSize());
+			}
+		}
 	}
 
 	private void onEntityDamaged(LivingEntity entity, DamageSource source,
@@ -162,7 +214,7 @@ public class DamageBlockSwap implements ModInitializer {
 		}
 
 		// One hit can add several rules (configurable).
-		int added = 0;
+		List<RandomSwapService.BlockPair> added = new ArrayList<>();
 		for (int i = 0; i < Config.swapsPerHit; i++) {
 			RandomSwapService.BlockPair pair = nearbyPool != null
 					? randomSwapService.getRandomPairFrom(nearbyPool)
@@ -170,24 +222,12 @@ public class DamageBlockSwap implements ModInitializer {
 			if (pair == null) break; // not enough swappable blocks (should never happen)
 
 			if (!SwapTracker.recordSwap(pair.a(), pair.b())) break; // new rule -> version goes up
-			announce(player, pair);
-			added++;
+			added.add(pair);
 		}
-		if (added == 0) return;
+		if (added.isEmpty()) return;
 
-		// Put the new rules on disk before any chunk can be stamped with them. Chunks are only ever
-		// advanced to the saved version, so if this write fails nothing in the world changes until
-		// a retry succeeds (and a crash can't leave chunks ahead of the journal file).
-		SwapTracker.flush();
-
-		// Refresh the loaded area around the player now; as the player moves, more chunks catch up,
-		// and brand-new chunks catch up when they load. Everything is throttled per tick.
-		worldSwapService.onHit(serverLevel, playerPos.getX() >> 4, playerPos.getZ() >> 4);
-
-		if (Config.logging) {
-			LOGGER.info("Player {} took damage. Added {} rule(s), version now {}, {} chunks queued.",
-					player.getName().getString(), added, SwapTracker.version(), worldSwapService.queueSize());
-		}
+		// Written, announced and applied around the player at the end of this tick (saveNewRules).
+		pendingHits.add(new PendingHit(player, serverLevel, playerPos.getX() >> 4, playerPos.getZ() >> 4, added));
 	}
 
 	private void announce(Player player, RandomSwapService.BlockPair pair) {
