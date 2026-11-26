@@ -148,13 +148,23 @@ public final class WorldSwapService {
 		ticksSinceIdle = 0;
 	}
 
+	/**
+	 * Re-checks the area around every player on the next tick (used once rules that could not be
+	 * saved earlier finally are, since only saved rules are applied to chunks).
+	 */
+	public void refreshAroundAllPlayers() {
+		lastPlayerChunk.clear();
+	}
+
 	/** How many chunks are waiting to be updated (for diagnostics). */
 	public int queueSize() {
 		return queue.size();
 	}
 
 	private void enqueueIfBehind(ServerLevel level, LevelChunk chunk) {
-		if (chunk.getAttachedOrElse(DamageBlockSwap.APPLIED_VERSION, 0) < SwapTracker.version()) {
+		// Quarantined chunks (stamped by another journal) come back as -1 and are never queued.
+		int start = SwapTracker.chunkStartVersion(chunk);
+		if (start >= 0 && start < SwapTracker.persistedVersion()) {
 			queue.add(new ChunkRef(level, chunk.getPos()));
 		}
 	}
@@ -174,7 +184,7 @@ public final class WorldSwapService {
 				break; // nothing left to do
 			}
 			if (processCurrentChunk(flags)) {
-				curChunk.setAttached(DamageBlockSwap.APPLIED_VERSION, curTargetVersion);
+				SwapTracker.stampChunk(curChunk, curTargetVersion);
 				curChunk = null;
 			}
 		}
@@ -198,15 +208,17 @@ public final class WorldSwapService {
 			if (chunk == null) {
 				continue; // unloaded since it was queued
 			}
-			int applied = chunk.getAttachedOrElse(DamageBlockSwap.APPLIED_VERSION, 0);
-			int current = SwapTracker.version();
-			if (applied >= current) {
-				continue; // already up to date
+			int applied = SwapTracker.chunkStartVersion(chunk); // -1 = stamped by another journal
+			// Only rules that are safely on disk are applied, so a chunk is never saved with a stamp
+			// the journal file doesn't have.
+			int current = SwapTracker.persistedVersion();
+			if (applied < 0 || applied >= current) {
+				continue; // quarantined, or already up to date
 			}
 
 			Map<Block, Block> mapping = SwapTracker.mappingBetween(applied, current);
 			if (mapping.isEmpty()) {
-				chunk.setAttached(DamageBlockSwap.APPLIED_VERSION, current);
+				SwapTracker.stampChunk(chunk, current);
 				continue; // nothing visibly changes for this range
 			}
 

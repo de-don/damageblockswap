@@ -13,6 +13,7 @@ import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
 import com.mojang.serialization.Codec;
 
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.UUIDUtil;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
@@ -49,6 +50,14 @@ public class DamageBlockSwap implements ModInitializer {
 	public static final AttachmentType<Integer> APPLIED_VERSION = AttachmentRegistry.createPersistent(
 			Identifier.fromNamespaceAndPath(MOD_ID, "applied_version"), Codec.INT);
 
+	/**
+	 * Second half of the chunk stamp: the id of the journal that {@link #APPLIED_VERSION} counts in.
+	 * A separate attachment (not a record replacing the int) so chunks stay readable by mod 1.0.x;
+	 * chunks stamped by 1.0.x simply don't have it. See {@link ChunkStamp}.
+	 */
+	public static final AttachmentType<UUID> JOURNAL_ID = AttachmentRegistry.createPersistent(
+			Identifier.fromNamespaceAndPath(MOD_ID, "journal_id"), UUIDUtil.CODEC);
+
 	// The two small "services" that do the real work. See their own files.
 	private final RandomSwapService randomSwapService = new RandomSwapService();
 	private final WorldSwapService worldSwapService = new WorldSwapService();
@@ -56,8 +65,9 @@ public class DamageBlockSwap implements ModInitializer {
 	// Per-player server-tick of the last swap, for the optional cooldown.
 	private final Map<UUID, Integer> lastSwapTick = new HashMap<>();
 
-	// How often (in ticks) to flush the rule book to disk if it changed.
-	private static final int SAVE_INTERVAL_TICKS = 200; // ~10 seconds
+	// The rule book is written right after every hit that adds rules. If that write failed, it is
+	// retried this often (in ticks); until then the new rules are not applied to any chunk.
+	private static final int SAVE_RETRY_INTERVAL_TICKS = 200; // ~10 seconds
 
 	@Override
 	public void onInitialize() {
@@ -75,19 +85,20 @@ public class DamageBlockSwap implements ModInitializer {
 		// The rule book is saved inside the world folder, so load/save it with the world.
 		// Load on SERVER_STARTING (before the levels and their spawn chunks are loaded), so the
 		// CHUNK_LOAD checks of those first chunks already compare against this world's rule book
-		// and not the previous world's. To avoid hammering the disk on rapid damage, the write is
-		// deferred and flushed periodically.
+		// and not the previous world's. New rules are written as soon as they are added (see
+		// onEntityDamaged); the periodic task below only retries a write that failed.
 		ServerLifecycleEvents.SERVER_STARTING.register(server -> {
 			resetSessionState(); // in case a previous server didn't shut down cleanly
 			SwapTracker.load(server);
 		});
 		ServerTickEvents.END_SERVER_TICK.register(server -> {
-			if (server.getTickCount() % SAVE_INTERVAL_TICKS == 0) {
-				SwapTracker.saveIfDirty(server);
+			if (server.getTickCount() % SAVE_RETRY_INTERVAL_TICKS == 0 && SwapTracker.saveIfDirty()) {
+				// Rules that were stuck in memory are on disk now, so chunks may catch up to them.
+				worldSwapService.refreshAroundAllPlayers();
 			}
 		});
 		ServerLifecycleEvents.SERVER_STOPPING.register(server -> {
-			SwapTracker.save(server);
+			SwapTracker.flush();
 			resetSessionState(); // don't let unfinished work leak into the next world
 		});
 		// Once the world is fully closed, forget its rule book too, so the swap map screen / Mod
@@ -128,6 +139,8 @@ public class DamageBlockSwap implements ModInitializer {
 		if (blocked || damageTaken <= 0.0F) return;
 		// World logic only runs on the server side.
 		if (!(entity.level() instanceof ServerLevel serverLevel)) return;
+		// The journal file is unreadable (logged loudly at load): the mod is off for this session.
+		if (!SwapTracker.canRecord()) return;
 
 		MinecraftServer server = serverLevel.getServer();
 
@@ -156,11 +169,16 @@ public class DamageBlockSwap implements ModInitializer {
 					: randomSwapService.getRandomPair();
 			if (pair == null) break; // not enough swappable blocks (should never happen)
 
-			SwapTracker.recordSwap(pair.a(), pair.b()); // new rule -> version goes up
+			if (!SwapTracker.recordSwap(pair.a(), pair.b())) break; // new rule -> version goes up
 			announce(player, pair);
 			added++;
 		}
 		if (added == 0) return;
+
+		// Put the new rules on disk before any chunk can be stamped with them. Chunks are only ever
+		// advanced to the saved version, so if this write fails nothing in the world changes until
+		// a retry succeeds (and a crash can't leave chunks ahead of the journal file).
+		SwapTracker.flush();
 
 		// Refresh the loaded area around the player now; as the player moves, more chunks catch up,
 		// and brand-new chunks catch up when they load. Everything is throttled per tick.
@@ -170,7 +188,6 @@ public class DamageBlockSwap implements ModInitializer {
 			LOGGER.info("Player {} took damage. Added {} rule(s), version now {}, {} chunks queued.",
 					player.getName().getString(), added, SwapTracker.version(), worldSwapService.queueSize());
 		}
-		// The rule book is now dirty; it's flushed to disk by the periodic saver (and on stop).
 	}
 
 	private void announce(Player player, RandomSwapService.BlockPair pair) {
