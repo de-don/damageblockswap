@@ -93,8 +93,12 @@ public class DamageBlockSwap implements ModInitializer {
 		// Once the world is fully closed, forget its rule book too, so the swap map screen / Mod
 		// Menu tab don't keep showing it (e.g. after leaving to the title screen or joining another
 		// server). Done on STOPPED rather than STOPPING so nothing still running during shutdown
-		// sees an empty rule book.
-		ServerLifecycleEvents.SERVER_STOPPED.register(server -> SwapTracker.clear());
+		// sees an empty rule book. Session state is reset once more here: chunks loaded between
+		// STOPPING and STOPPED could have queued references to the closing world.
+		ServerLifecycleEvents.SERVER_STOPPED.register(server -> {
+			resetSessionState();
+			SwapTracker.clear();
+		});
 
 		// Forget a player's cooldown timer when they leave.
 		ServerPlayConnectionEvents.DISCONNECT.register((handler, server) -> lastSwapTick.remove(handler.player.getUUID()));
@@ -116,8 +120,10 @@ public class DamageBlockSwap implements ModInitializer {
 	                             float baseDamageTaken, float damageTaken, boolean blocked) {
 		// Only react to players who genuinely took damage.
 		if (!(entity instanceof Player player)) return;
-		// Fake players (mod machines, Carpet bots, ...) are not real players taking damage; without
-		// this check an automated farm would add rules nonstop.
+		// Fabric fake players (block breakers/placers and other mod machines) are not real players
+		// taking damage; without this check an automated farm would add rules nonstop. Carpet bots
+		// are NOT caught here (they extend ServerPlayer directly) and are deliberately treated as
+		// players, see docs/decisions.md.
 		if (player instanceof FakePlayer) return;
 		if (blocked || damageTaken <= 0.0F) return;
 		// World logic only runs on the server side.

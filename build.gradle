@@ -55,6 +55,11 @@ dependencies {
 
 test {
 	useJUnitPlatform()
+	// Tests that run Minecraft's Bootstrap make log4j write logs/latest.log into the working
+	// directory; keep that inside build/ instead of the project root.
+	def testRunDir = layout.buildDirectory.dir("test-run").get().asFile
+	workingDir = testRunDir
+	doFirst { testRunDir.mkdirs() }
 }
 
 processResources {

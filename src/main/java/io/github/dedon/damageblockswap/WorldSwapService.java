@@ -137,8 +137,13 @@ public final class WorldSwapService {
 		curMapping = null;
 		curTargetVersion = 0;
 		curHighest = 0;
+		curMinX = 0;
+		curMinZ = 0;
+		curMinY = 0;
 		sectionIndex = 0;
 		posInSection = 0;
+		budgetChanges = 0;
+		deadlineNanos = 0L;
 		changedSinceIdle = 0;
 		ticksSinceIdle = 0;
 	}
