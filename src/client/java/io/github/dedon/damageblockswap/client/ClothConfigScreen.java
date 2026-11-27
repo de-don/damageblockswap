@@ -118,7 +118,7 @@ final class ClothConfigScreen {
 		general.addEntry(entry.startStrList(
 						Component.literal("Damage types that don't swap"), new ArrayList<>(Config.ignoredDamageTypes))
 				.setDefaultValue(new ArrayList<>(Config.DEFAULT_IGNORED_DAMAGE_TYPES))
-				.setTooltip(Component.literal("Damage types that do NOT cause a swap: ids or #tags, e.g. minecraft:fall or #minecraft:is_fire. The default " + String.join(", ", Config.DEFAULT_IGNORED_DAMAGE_TYPES) + " holds drowning, starving, suffocation, cramming, burning, freezing, the void, the world border and /kill. Empty = every damage causes swaps. The checkboxes below edit this list."))
+				.setTooltip(Component.literal("Damage types that do NOT cause a swap: ids or #tags, e.g. minecraft:fall or #minecraft:is_fire. The default list (" + String.join(", ", Config.DEFAULT_IGNORED_DAMAGE_TYPES) + ") holds drowning, starving, suffocation, cramming, burning, freezing, the void, the world border and /kill. Empty = every damage causes swaps. In single player the switches below edit this list."))
 				.setSaveConsumer(Config::setIgnoredDamageTypes)
 				.build());
 
@@ -142,13 +142,25 @@ final class ClothConfigScreen {
 	}
 
 	/**
-	 * Damage types and tags of the world the player is in (the client's synced copy of the server's
-	 * registry: datapack and mod types included), or null on the title screen, where no world and so
-	 * no live registry exists.
+	 * Damage types and tags of the single player world the player is in (the built-in server's
+	 * registry as synced to the client: datapack and mod types included), or null when there is no
+	 * such world. On the title screen no registry exists. On a dedicated server or as a LAN guest the
+	 * registry and tags are the remote server's, while this screen saves the local config, which only
+	 * single player reads: the switches would show and write another server's view (see decisions.md).
 	 */
 	private static @Nullable DamageTypeToggles liveDamageTypes() {
-		ClientPacketListener connection = Minecraft.getInstance().getConnection();
-		return connection != null ? DamageTypeCatalog.toggles(connection.registryAccess()) : null;
+		Minecraft minecraft = Minecraft.getInstance();
+		ClientPacketListener connection = minecraft.getConnection();
+		if (connection == null || !minecraft.hasSingleplayerServer()) {
+			return null;
+		}
+		return DamageTypeCatalog.toggles(connection.registryAccess());
+	}
+
+	/** True when connected to a server that is not this game's built-in one (dedicated or LAN guest). */
+	private static boolean onRemoteServer() {
+		Minecraft minecraft = Minecraft.getInstance();
+		return minecraft.getConnection() != null && !minecraft.hasSingleplayerServer();
 	}
 
 	/**
@@ -159,10 +171,12 @@ final class ClothConfigScreen {
 			Map<String, Boolean> switched) {
 		SubCategoryBuilder section = entry.startSubCategory(Component.literal("Damage types that cause swaps"))
 				.setExpanded(false)
-				.setTooltip(Component.literal("One switch per damage type of this world. \"Swaps\" = getting hurt this way adds a rule. Switching edits the list above: off adds the type, on removes it (a #tag holding it is replaced by its other types)."));
+				.setTooltip(Component.literal("One switch per damage type of this world. \"Swaps\" = getting hurt this way adds a rule. Switching edits the list above: off adds the type, on removes it (a #tag holding it is replaced by its other types). If you also edit the list by hand before saving, the switch wins for its type."));
 		if (toggles == null) {
-			section.add(entry.startTextDescription(Component.literal(
-					"Open the settings from the pause menu in a world to switch damage types one by one. The list above works everywhere.")).build());
+			String note = onRemoteServer()
+					? "You are on a server: its own config decides which damage types swap, and these settings only change your single player games. The switches are available in single player. The list above still edits your single player settings."
+					: "Open the settings from the pause menu in a single player world to switch damage types one by one. The list above works everywhere.";
+			section.add(entry.startTextDescription(Component.literal(note)).build());
 			return section.build();
 		}
 		List<String> current = Config.ignoredDamageTypes;

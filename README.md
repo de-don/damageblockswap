@@ -108,14 +108,17 @@ With them installed: **main menu / pause → Mods → Damage Block Swap → ⚙*
 **General** tab (all settings) and a read-only **Swap Map** tab.
 
 At the bottom of **General**, the collapsible **Damage types that cause swaps** section has one
-switch per damage type of the world you are in (including types added by datapacks and mods):
-*Swaps* or *No swap*. It edits the `ignoredDamageTypes` list above it, which stays what is saved:
-switching a type off adds its id; switching it on removes it, and a `#tag` holding it (like the
-default `#damageblockswap:ignored`) is replaced by the tag's other types — from then on later changes
-to that tag by a datapack no longer apply to your list. Without touching the switches the list,
-and the tag in it, is kept as it is. The switches need a world (open the settings from the pause
-menu); on the title screen only the list is shown. These are the settings of your own game: on a
-dedicated server, the server's config file counts.
+switch per damage type of the single player world you are in (including types added by datapacks
+and mods): *Swaps* or *No swap*. It edits the `ignoredDamageTypes` list above it, which stays what is
+saved: switching a type off adds its id; switching it on removes it, and a `#tag` holding it (like the
+default `#damageblockswap:ignored`) is replaced by the tag's current types minus that one. From then on
+your list no longer follows that tag: neither a datapack's changes nor types a later version of this
+mod adds to `#damageblockswap:ignored`. The tag is expanded as it is in the world you have open, and
+the config is shared by all your worlds. Without touching the switches the list, and the tag in it, is
+kept as it is. The switches need a single player world (open the settings from the pause menu); on the
+title screen only the list is shown. On a dedicated server or as a LAN guest the section only says
+that the server's own config file counts: these settings change your single player games, not the
+server.
 
 ## Configuration
 

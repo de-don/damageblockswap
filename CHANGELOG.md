@@ -19,9 +19,11 @@
   Players without the mod get nothing and are not affected; on a server without the mod the screen
   says so and points to `/dbs list`.
 - Settings screen: a collapsible "Damage types that cause swaps" section with a switch per damage
-  type of the current world (datapack and mod types too). It edits the `ignoredDamageTypes` list,
-  which stays what is saved; the config file format is unchanged and the `#damageblockswap:ignored`
-  tag keeps working until one of its own types is switched on.
+  type of the current single player world (datapack and mod types too). It edits the
+  `ignoredDamageTypes` list, which stays what is saved; the config file format is unchanged and the
+  `#damageblockswap:ignored` tag keeps working until one of its own types is switched on. Then the tag
+  is replaced by its current types, so types added to it later (by a datapack or a future version of
+  the mod) are not picked up. On a server the section says that the server's config counts.
 - README: the mod runs on the server and vanilla clients can join; the swap map needs the mod on the client.
 
 ### Fixed

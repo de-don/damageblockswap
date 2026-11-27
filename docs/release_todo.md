@@ -31,12 +31,13 @@ Tag `v1.1.0` is set only after plan item 5 is done (see below). Source: the fina
       without Cloth and Mod Menu; LAN with a guest (both players see rules and the chat message);
       vanilla client joining a modded server. Item 5a adds: `/dbs` admin commands by an op and a
       non-op on a dedicated server; chat messages in Russian with the mod and in English on a vanilla
-      client; `/dbs reload` after editing the config of a running server. Item 5c adds: the "Damage types that cause swaps" switches (open from the pause menu,
-      switch drowning on, save, drown: a rule appears; the config file has the tag replaced), `runClient`
-      shows Mod Menu and Cloth. Item 5b adds: swap map
+      client; `/dbs reload` after editing the config of a running server. Item 5b adds: swap map
       screen of a modded client on a dedicated server and as a LAN guest (shows the server's rules,
       updated after a hit when reopened, nothing stale after switching servers); a vanilla client
-      is not kicked.
+      is not kicked. Item 5c adds: the "Damage types that cause swaps" switches in single player (open
+      from the pause menu, switch drowning on, save, drown: a rule appears; the config file has the tag
+      replaced); on a dedicated server and as a LAN guest the section shows only the "server settings"
+      note; `runClient` shows Mod Menu and Cloth.
 - [ ] Create tag `v1.1.0`; GitHub Actions builds and attaches the jar. Only on the user's "yes".
 
 ## Optional, can wait for 1.1.1
@@ -60,9 +61,12 @@ From the Opus review, minor findings:
       `Config.DEFAULT_IGNORED_DAMAGE_TYPES`.
 - [x] (5c) README: say that the mod is server-side only and works with vanilla clients (verify live first).
 - [ ] No global limit on the number of rules (10 players in combat can add ~10 rules per second).
-- [ ] Settings made in the client UI do not affect a remote server; the screen does not say so.
+- [x] (5c review-fix) Settings made in the client UI do not affect a remote server; the screen does not say so.
+      The damage type section says so and has no switches there; the other settings still don't.
 - [x] (5a) Dedicated server reads the config only at start; `/reload` does not (`/dbs reload` is item 5).
-- [ ] Dedicated server without Cloth/Mod Menu is not covered by a test (Cloth is `implementation`).
+- [ ] Dedicated server without Cloth/Mod Menu is not covered by a test. Half done in 5c: they are
+      `clientCompileOnly`, so main/gametest code can't reference them, but `localRuntime` still loads
+      Cloth into `runGameTest`; a server run without them is still open.
 - [ ] Known-issues candidates: damage from lava/magma/cactus can loop one rule per cooldown (a safe
       zone around the player was not built); some unstable blocks (corals, copper, concrete powder,
       sponge, eggs) are not in `never_swap`; `powered`/`lit` can stay stuck until a neighbour update.
