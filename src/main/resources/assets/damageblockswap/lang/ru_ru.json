@@ -9,8 +9,8 @@
 	"damageblockswap.command.list.empty": "Пока ни один блок не заменён.",
 	"damageblockswap.command.list.header": "Заменённые типы блоков (%s):",
 	"damageblockswap.command.list.entry": "%s → %s  [%s → %s]",
-	"damageblockswap.command.lookup.unchanged": "%s не заменён — выглядит как раньше.",
-	"damageblockswap.command.lookup.looks_like": "%s теперь выглядит как %s — ищите его.",
+	"damageblockswap.command.lookup.unchanged": "Блок «%s» не заменён — выглядит как раньше.",
+	"damageblockswap.command.lookup.looks_like": "Блок «%s» теперь выглядит как «%s» — ищите его.",
 	"damageblockswap.command.lookup.was": "Блоки, которые теперь выглядят как %s, изначально были %s.",
 
 	"damageblockswap.command.status.rules": "Правил: %s (на диске: %s, заглушек для отсутствующих блоков: %s)",
@@ -26,12 +26,12 @@
 	"damageblockswap.command.resume.already": "Пауза не включена.",
 
 	"damageblockswap.command.read_only": "Журнал замен для этого мира доступен только для чтения (см. лог сервера); правила добавлять нельзя.",
-	"damageblockswap.command.add.done": "Правило #%s записано: %s ↔ %s. Оно сохранится и применится в конце этого тика.",
+	"damageblockswap.command.add.done": "Правило #%s записано: %s ↔ %s. Оно вступит в силу, когда запишется в журнал, обычно в конце этого тика.",
 	"damageblockswap.command.add.same": "Выберите два разных блока.",
 	"damageblockswap.command.add.unsafe": "%s нельзя заменять: это воздух, блок с данными (block entity), двухблочный блок или блок из #damageblockswap:never_swap.",
 	"damageblockswap.command.undo.done": "Правило #%s (%s ↔ %s) отменено: оно добавлено ещё раз как правило #%s.",
 	"damageblockswap.command.undo.nothing": "Нет правила для отмены.",
 
 	"damageblockswap.command.reload.done": "Конфиг перечитан: для новых правил доступно блоков: %s.",
-	"damageblockswap.command.reload.failed": "Конфиг НЕ перечитан, в файле ошибка (текущие настройки сохранены): %s"
+	"damageblockswap.command.reload.failed": "Конфиг НЕ перечитан, текущие настройки сохранены: %s"
 }

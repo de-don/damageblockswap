@@ -117,7 +117,8 @@ public final class SwapCommand {
 	private static int runStatus(CommandContext<CommandSourceStack> ctx, DamageBlockSwap mod) {
 		CommandSourceStack source = ctx.getSource();
 		int rules = SwapTracker.version();
-		if (!SwapTracker.canRecord()) {
+		boolean readOnly = !SwapTracker.canRecord();
+		if (readOnly) {
 			source.sendFailure(Messages.STATUS_READ_ONLY.with());
 		}
 		source.sendSuccess(() -> Messages.STATUS_RULES.with(rules, SwapTracker.persistedVersion(),
@@ -128,7 +129,9 @@ public final class SwapCommand {
 				? Messages.STATUS_PAUSED.with()
 				: Messages.STATUS_ACTIVE.with(Config.cooldownTicks, Config.swapsPerHit), false);
 		source.sendSuccess(() -> Messages.STATUS_QUEUE.with(mod.chunkQueueSize()), false);
-		return rules;
+		// 1 = the mod works in this world, 0 = journal unreadable (for /execute store success); not
+		// the rule count, which is 0 in a fresh world and would read as a failure.
+		return readOnly ? 0 : 1;
 	}
 
 	private static int runPause(CommandContext<CommandSourceStack> ctx, DamageBlockSwap mod, boolean pause) {

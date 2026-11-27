@@ -9,7 +9,7 @@
   adding rules until resumed or the server restarts), `/dbs add <block> <block>` (a rule by hand,
   refusing air, block-entity, two-block and `never_swap` blocks), `/dbs undo` (cancels the newest rule
   by adding it once more; nothing is erased from the journal) and `/dbs reload` (re-reads the config on
-  a running server; a broken file keeps the current settings). `/dbs list` and `/dbs lookup` stay open
+  a running server; a broken or missing file keeps the current settings). `/dbs list` and `/dbs lookup` stay open
   to everyone.
 - Chat messages and command replies are translatable (English, Russian), with an English fallback for
   vanilla clients.

@@ -26,12 +26,12 @@
 	"damageblockswap.command.resume.already": "Not paused.",
 
 	"damageblockswap.command.read_only": "The swap journal is read-only for this world (see the server log); no rules can be added.",
-	"damageblockswap.command.add.done": "Rule #%s recorded: %s ↔ %s. It is saved and applied at the end of this tick.",
+	"damageblockswap.command.add.done": "Rule #%s recorded: %s ↔ %s. It takes effect once it is saved to the journal, normally at the end of this tick.",
 	"damageblockswap.command.add.same": "Pick two different blocks.",
 	"damageblockswap.command.add.unsafe": "%s can't be swapped: it is air, keeps data in a block entity, is a two-block block or is in #damageblockswap:never_swap.",
 	"damageblockswap.command.undo.done": "Rule #%s (%s ↔ %s) undone by adding it again as rule #%s.",
 	"damageblockswap.command.undo.nothing": "There is no rule to undo.",
 
 	"damageblockswap.command.reload.done": "Config reloaded: %s blocks can be picked for new rules.",
-	"damageblockswap.command.reload.failed": "Config NOT reloaded, the file has an error (the current settings are kept): %s"
+	"damageblockswap.command.reload.failed": "Config NOT reloaded, the current settings are kept: %s"
 }

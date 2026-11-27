@@ -13,8 +13,19 @@ import java.util.List;
  * <p>No Minecraft classes; generic over the hit type so it is unit-tested with plain values.
  */
 final class AnnouncementBacklog<H> {
-	/** What to announce: whole hits, then how many rules (from how many hits) were left out. */
-	record Batch<H>(List<H> hits, int omittedRules, int omittedHits) {
+	/**
+	 * What to announce: whole hits (with {@code keptRules} rules between them), then how many rules
+	 * (from how many hits) were left out.
+	 */
+	record Batch<H>(List<H> hits, int keptRules, int omittedRules, int omittedHits) {
+		/**
+		 * Rules that get no line of their own when at most {@code maxLines} lines are printed: the
+		 * kept hits' rules past the cap (one hit may have more than fit) plus every omitted rule.
+		 * This is the N of the "...and N more" line.
+		 */
+		int unlisted(int maxLines) {
+			return Math.max(0, keptRules - maxLines) + omittedRules;
+		}
 	}
 
 	private final int maxRules;
@@ -30,15 +41,20 @@ final class AnnouncementBacklog<H> {
 		this.maxRules = maxRules;
 	}
 
-	/** Adds a hit that added {@code rules} rules. Memory stays bounded however many are added. */
-	void add(H hit, int rules) {
+	/**
+	 * Adds a hit that added {@code rules} rules. Memory stays bounded however many are added. Returns
+	 * false if the hit was only counted: it will never be announced (or logged) one by one, so the
+	 * caller should log it now if it wants to keep who caused what.
+	 */
+	boolean add(H hit, int rules) {
 		if (keptRules < maxRules) {
 			kept.add(hit);
 			keptRules += rules;
-		} else {
-			omittedRules += rules;
-			omittedHits++;
+			return true;
 		}
+		omittedRules += rules;
+		omittedHits++;
+		return false;
 	}
 
 	boolean isEmpty() {
@@ -52,10 +68,10 @@ final class AnnouncementBacklog<H> {
 
 	/**
 	 * Takes everything out. {@link Batch#omittedRules()} counts only the hits that were not kept; a
-	 * kept hit may still have more rules than fit in {@link #maxLines()}, the caller adds those.
+	 * kept hit may still have more rules than fit in {@link #maxLines()}, {@link Batch#unlisted} adds those.
 	 */
 	Batch<H> drain() {
-		Batch<H> batch = new Batch<>(List.copyOf(kept), omittedRules, omittedHits);
+		Batch<H> batch = new Batch<>(List.copyOf(kept), keptRules, omittedRules, omittedHits);
 		clear();
 		return batch;
 	}

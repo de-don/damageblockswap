@@ -63,7 +63,7 @@ final class Messages {
 	static final Msg READ_ONLY = new Msg(P + "command.read_only",
 			"The swap journal is read-only for this world (see the server log); no rules can be added.");
 	static final Msg ADD_DONE = new Msg(P + "command.add.done",
-			"Rule #%s recorded: %s ↔ %s. It is saved and applied at the end of this tick.");
+			"Rule #%s recorded: %s ↔ %s. It takes effect once it is saved to the journal, normally at the end of this tick.");
 	static final Msg ADD_SAME = new Msg(P + "command.add.same", "Pick two different blocks.");
 	static final Msg ADD_UNSAFE = new Msg(P + "command.add.unsafe",
 			"%s can't be swapped: it is air, keeps data in a block entity, is a two-block block or is in #damageblockswap:never_swap.");
@@ -74,7 +74,7 @@ final class Messages {
 	static final Msg RELOAD_DONE = new Msg(P + "command.reload.done",
 			"Config reloaded: %s blocks can be picked for new rules.");
 	static final Msg RELOAD_FAILED = new Msg(P + "command.reload.failed",
-			"Config NOT reloaded, the file has an error (the current settings are kept): %s");
+			"Config NOT reloaded, the current settings are kept: %s");
 
 	/** All of the above, for the test that compares them with the language files. */
 	static final List<Msg> ALL = List.of(

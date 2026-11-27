@@ -142,7 +142,7 @@ For operators (permission level 2, like `/setblock`; in single player with cheat
   Nothing is erased from the journal, so it is as safe as any other rule. Repeat to go back further:
   each undo cancels the newest rule that is still in effect.
 - `/dbs reload` — re-read `config/damageblockswap.json` on the running server and rebuild the block
-  and damage type lists. If the file has an error, the current settings stay and the error is shown.
+  and damage type lists. If the file has an error or is missing, the current settings stay and the reason is shown.
 
 There is no `/dbs reset`: see `docs/decisions.md`. To start over, stop the server and delete (or move)
 the journal file; old chunks then stay as they are (see "The swap journal file").

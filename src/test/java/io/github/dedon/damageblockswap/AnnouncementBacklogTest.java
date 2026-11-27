@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -47,6 +48,35 @@ class AnnouncementBacklogTest {
 		assertEquals(List.of("steve"), batch.hits());
 		assertEquals(1, batch.omittedRules());
 		assertEquals(20, backlog.maxLines());
+	}
+
+	@Test
+	void addSaysWhetherTheHitWillBeListed() {
+		AnnouncementBacklog<String> backlog = new AnnouncementBacklog<>(2);
+		assertTrue(backlog.add("steve", 1));
+		assertTrue(backlog.add("alex", 5)); // still under the cap when added: kept whole
+		assertFalse(backlog.add("sam", 1), "a hit past the cap must be reported as not listed");
+	}
+
+	@Test
+	void unlistedCountsTheBigHitsTailPlusOmittedHits() {
+		AnnouncementBacklog<String> backlog = new AnnouncementBacklog<>(20);
+		backlog.add("steve", 1);
+		backlog.add("alex", 30); // kept whole: 31 kept rules, only 20 get a line
+		backlog.add("sam", 2);   // omitted
+		backlog.add("kim", 3);   // omitted
+
+		AnnouncementBacklog.Batch<String> batch = backlog.drain();
+		assertEquals(31, batch.keptRules());
+		assertEquals(11 + 5, batch.unlisted(20));
+		assertEquals(36, 20 + batch.unlisted(20), "every rule is either a line or in the count");
+	}
+
+	@Test
+	void unlistedIsZeroWhenEverythingFits() {
+		AnnouncementBacklog<String> backlog = new AnnouncementBacklog<>(20);
+		backlog.add("steve", 20);
+		assertEquals(0, backlog.drain().unlisted(20));
 	}
 
 	@Test

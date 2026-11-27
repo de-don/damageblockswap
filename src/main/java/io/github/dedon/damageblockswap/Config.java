@@ -149,7 +149,8 @@ public final class Config {
 	/**
 	 * Re-reads the file for {@code /dbs reload}. Unlike {@link #load()} (which falls back to the
 	 * defaults), a file that can't be read leaves the current settings and the file untouched, so a
-	 * typo made while the server runs doesn't silently reset everything. Returns null on success, or
+	 * typo made while the server runs doesn't silently reset everything; the same for a missing file.
+	 * Returns null on success, or
 	 * what was wrong with the file.
 	 */
 	public static String reload() {
@@ -169,8 +170,11 @@ public final class Config {
 					return "the file is empty";
 				}
 			} else {
-				data = new Data();
-				data.configVersion = CONFIG_VERSION;
+				// Deleted or renamed while the server runs: reloading "nothing" would silently reset
+				// every setting (blacklist, cooldown, ...) to the defaults, so keep the current ones.
+				// The file is written again on the next start (or by the settings screen).
+				LOGGER.warn("Config reload: {} does not exist, keeping the current settings", path);
+				return "file not found: " + path;
 			}
 		} catch (Exception e) {
 			LOGGER.warn("Config reload: could not read {}, keeping the current settings", path, e);

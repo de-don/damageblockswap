@@ -294,4 +294,21 @@ class ConfigTest {
 		assertTrue(Config.reloadFrom(file) != null);
 		assertEquals(7, Config.cooldownTicks);
 	}
+
+	@Test
+	void reloadOfAMissingFileKeepsTheCurrentSettings(@TempDir Path dir) throws IOException {
+		Path file = dir.resolve("damageblockswap.json");
+		Files.writeString(file, "{\"configVersion\": 2, \"cooldownTicks\": 7, \"blacklist\": [\"dirt\"]}");
+		Config.loadFrom(file);
+		Files.delete(file);
+		int before = Config.generation;
+
+		String error = Config.reloadFrom(file);
+
+		assertTrue(error != null && !error.isBlank(), "a missing file was reported as reloaded");
+		assertEquals(7, Config.cooldownTicks, "settings were reset to the defaults");
+		assertEquals(List.of("minecraft:dirt"), Config.blacklist, "blacklist was reset to the defaults");
+		assertEquals(before, Config.generation);
+		assertFalse(Files.exists(file), "reload created a file the admin removed");
+	}
 }

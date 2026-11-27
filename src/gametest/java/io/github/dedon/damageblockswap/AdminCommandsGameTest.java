@@ -4,13 +4,18 @@ import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.ParseResults;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
 
+import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
+import net.fabricmc.loader.api.FabricLoader;
 
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.permissions.PermissionSet;
+import net.minecraft.world.damagesource.DamageSource;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 
@@ -95,16 +100,44 @@ public class AdminCommandsGameTest {
 		helper.succeed();
 	}
 
+	private static DamageBlockSwap mod() {
+		return FabricLoader.getInstance().getEntrypoints("main", ModInitializer.class).stream()
+				.filter(DamageBlockSwap.class::isInstance)
+				.map(DamageBlockSwap.class::cast)
+				.findFirst()
+				.orElseThrow();
+	}
+
 	@GameTest
-	public void pauseAndResume(GameTestHelper helper) {
+	public void pauseStopsRulesFromDamageWithoutUsingTheCooldown(GameTestHelper helper) {
 		CommandSourceStack op = operator(helper);
+		DamageBlockSwap mod = mod();
+		// A plain survival Player in the test level (not a FakePlayer, not in the player list).
+		Player player = helper.makeMockPlayer(GameType.SURVIVAL);
+		DamageSource hit = helper.getLevel().damageSources().generic();
+		int before = SwapTracker.version();
+
 		helper.assertTrue(run(helper, op, "dbs pause") == 1, "pause failed");
+		RuntimeException failure = null;
 		try {
+			helper.assertTrue(mod.isPaused(), "pause did not reach the mod");
 			helper.assertTrue(run(helper, op, "dbs pause") == 0, "pausing twice was not noticed");
-			helper.assertTrue(run(helper, op, "dbs status") == SwapTracker.version(), "status runs and counts rules");
-		} finally {
-			helper.assertTrue(run(helper, op, "dbs resume") == 1, "resume failed");
+			helper.assertTrue(run(helper, op, "dbs status") == 1, "status failed");
+			// Exactly what AFTER_DAMAGE calls on a real hit. Resumed below without hurting anyone again,
+			// so this test never adds a random rule to the shared test world.
+			mod.onEntityDamaged(player, hit, 4.0F, 4.0F, false);
+			helper.assertTrue(SwapTracker.version() == before, "damage added a rule while paused");
+			helper.assertFalse(mod.hasCooldownEntry(player.getUUID()), "a paused hit used up the cooldown");
+		} catch (RuntimeException e) {
+			failure = e;
 		}
+		// Always resume (pause is global), but don't let that check hide the first failure.
+		int resumed = run(helper, op, "dbs resume");
+		if (failure != null) {
+			throw failure;
+		}
+		helper.assertTrue(resumed == 1, "resume failed");
+		helper.assertFalse(mod.isPaused(), "resume did not reach the mod");
 		helper.assertTrue(run(helper, op, "dbs resume") == 0, "resuming twice was not noticed");
 		helper.succeed();
 	}

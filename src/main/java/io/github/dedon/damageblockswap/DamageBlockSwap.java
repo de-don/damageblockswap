@@ -15,6 +15,7 @@ import com.mojang.serialization.Codec;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.UUIDUtil;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
@@ -264,7 +265,12 @@ public class DamageBlockSwap implements ModInitializer {
 		}
 
 		for (PendingHit hit : pendingHits) {
-			unsavedHits.add(hit, hit.pairs().size());
+			if (!unsavedHits.add(hit, hit.pairs().size()) && Config.logging) {
+				// Past the announcement cap: this hit only ends up in the "...and N more" count, so log
+				// who caused which rules now (the journal itself has no player names).
+				LOGGER.info("{} ({}) added rule(s) {}; not announced one by one (too many at once).",
+						hit.playerName().getString(), hit.cause(), describe(hit.pairs()));
+			}
 		}
 		pendingHits.clear();
 		if (!SwapTracker.flush()) {
@@ -284,12 +290,10 @@ public class DamageBlockSwap implements ModInitializer {
 	 */
 	private void announceAll(MinecraftServer server, AnnouncementBacklog.Batch<PendingHit> batch) {
 		int printed = 0;
-		int cut = batch.omittedRules();
 		for (PendingHit hit : batch.hits()) {
 			for (RandomSwapService.BlockPair pair : hit.pairs()) {
 				if (printed >= MAX_ANNOUNCED_RULES) {
-					cut++;
-					continue;
+					break;
 				}
 				printed++;
 				if (Config.chatMessages) {
@@ -310,18 +314,37 @@ public class DamageBlockSwap implements ModInitializer {
 				}
 			}
 		}
+		int cut = batch.unlisted(MAX_ANNOUNCED_RULES);
 		if (cut > 0) {
 			if (Config.chatMessages) {
 				server.getPlayerList().broadcastSystemMessage(SwapAnnouncement.more(cut), false);
 			}
 			if (Config.logging && batch.omittedHits() > 0) {
-				LOGGER.info("{} more hit(s) added {} rule(s) while the journal could not be saved; not listed one by one.",
-						batch.omittedHits(), batch.omittedRules());
+				// The cap applies to any batch (many hits in one tick, or a backlog after a failed write).
+				LOGGER.info("{} more hit(s) added {} rule(s), version now {}; each was logged when it was recorded.",
+						batch.omittedHits(), batch.omittedRules(), SwapTracker.version());
 			}
 		}
 	}
 
-	private void onEntityDamaged(LivingEntity entity, DamageSource source,
+	private static String describe(List<RandomSwapService.BlockPair> pairs) {
+		StringBuilder out = new StringBuilder();
+		for (RandomSwapService.BlockPair pair : pairs) {
+			if (!out.isEmpty()) {
+				out.append(", ");
+			}
+			out.append(BuiltInRegistries.BLOCK.getKey(pair.a())).append(" <-> ").append(BuiltInRegistries.BLOCK.getKey(pair.b()));
+		}
+		return out.toString();
+	}
+
+	/** Whether {@code player}'s cooldown is running (a hit of theirs added a rule). For gametests. */
+	boolean hasCooldownEntry(UUID player) {
+		return lastSwapTick.containsKey(player);
+	}
+
+	// Package-private for AdminCommandsGameTest (pause); registered as AFTER_DAMAGE in onInitialize.
+	void onEntityDamaged(LivingEntity entity, DamageSource source,
 	                             float baseDamageTaken, float damageTaken, boolean blocked) {
 		// Only react to players who genuinely took damage.
 		if (!(entity instanceof Player player)) return;
