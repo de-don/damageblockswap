@@ -13,6 +13,7 @@
 - Default `cooldownTicks` is now 20. Configs that still have the old default 0 are raised to 20 once.
 - New `ignoredDamageTypes` setting: drowning, starving, suffocation, cramming, burning, freezing,
   the void, the world border and `/kill` no longer cause swaps by default (tag `damageblockswap:ignored`).
+- A hit that adds no rule no longer starts the cooldown.
 
 ## 1.1.0
 

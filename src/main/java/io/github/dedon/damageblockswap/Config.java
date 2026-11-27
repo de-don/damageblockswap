@@ -57,16 +57,20 @@ public final class Config {
 	 * Block ids ({@code "minecraft:bedrock"}) and block tags ({@code "#minecraft:logs"}) that are never
 	 * picked for a new swap rule. Normalized on load. Only affects new rules, never rules already made.
 	 */
-	public static List<String> blacklist = new ArrayList<>();
+	public static volatile List<String> blacklist = new ArrayList<>();
 	/** Damage type ids and {@code #tags} that don't trigger swaps. Normalized on load. */
-	public static List<String> ignoredDamageTypes = new ArrayList<>(DEFAULT_IGNORED_DAMAGE_TYPES);
+	public static volatile List<String> ignoredDamageTypes = new ArrayList<>(DEFAULT_IGNORED_DAMAGE_TYPES);
 
 	public static final int MIN_SWAPS = 1;
 	public static final int MAX_SWAPS = 100;
 	public static final int MAX_SWAP_RADIUS = 16;
 
-	/** Bumped whenever settings change, so caches built from the config (e.g. the swappable list) can rebuild. */
-	public static int generation = 0;
+	/**
+	 * Bumped whenever settings change, so caches built from the config (e.g. the swappable list) can rebuild.
+	 * Volatile, like the two lists: in single player the settings screen writes them on the render thread
+	 * while the server thread reads them.
+	 */
+	public static volatile int generation = 0;
 
 	private Config() {
 	}
@@ -159,6 +163,19 @@ public final class Config {
 			data.configVersion = 2;
 		}
 		return data;
+	}
+
+	/**
+	 * Sets {@link #blacklist} from the settings screen, already normalized: the server thread may read
+	 * the list at any time (e.g. on a tag reload), so it must never see the raw input.
+	 */
+	public static void setBlacklist(List<String> raw) {
+		blacklist = IdFilter.normalize(raw);
+	}
+
+	/** Sets {@link #ignoredDamageTypes} from the settings screen, already normalized (see {@link #setBlacklist}). */
+	public static void setIgnoredDamageTypes(List<String> raw) {
+		ignoredDamageTypes = IdFilter.normalize(raw);
 	}
 
 	/**

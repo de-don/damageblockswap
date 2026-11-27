@@ -103,14 +103,14 @@ final class ClothConfigScreen {
 						Component.literal("Blacklisted blocks"), new ArrayList<>(Config.blacklist))
 				.setDefaultValue(new ArrayList<>())
 				.setTooltip(Component.literal("Blocks never picked for a new swap: ids or #tags, e.g. minecraft:diamond_ore or #minecraft:logs. The \"minecraft:\" prefix is optional. Swaps that already happened are not affected. Bedrock, portals, barriers, fire, doors, tall plants and similar are always excluded (block tag damageblockswap:never_swap)."))
-				.setSaveConsumer(value -> Config.blacklist = value)
+				.setSaveConsumer(Config::setBlacklist)
 				.build());
 
 		general.addEntry(entry.startStrList(
 						Component.literal("Damage types that don't swap"), new ArrayList<>(Config.ignoredDamageTypes))
 				.setDefaultValue(new ArrayList<>(List.of("#damageblockswap:ignored")))
 				.setTooltip(Component.literal("Damage types that do NOT cause a swap: ids or #tags, e.g. minecraft:fall or #minecraft:is_fire. The default tag #damageblockswap:ignored holds drowning, starving, suffocation, cramming, burning, freezing, the void, the world border and /kill. Empty = every damage causes swaps."))
-				.setSaveConsumer(value -> Config.ignoredDamageTypes = value)
+				.setSaveConsumer(Config::setIgnoredDamageTypes)
 				.build());
 
 		// Second tab: a read-only view of what has turned into what so far.

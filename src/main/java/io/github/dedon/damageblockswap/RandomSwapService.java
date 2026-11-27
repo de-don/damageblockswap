@@ -131,6 +131,12 @@ public final class RandomSwapService {
 		return true;
 	}
 
+	/** The blocks new rules may pick from, rebuilt first if needed. Read-only; for the gametests. */
+	List<Block> allowedBlocks() {
+		ensureInitialized();
+		return java.util.Collections.unmodifiableList(allowedBlocks);
+	}
+
 	/**
 	 * Returns two different random blocks, or {@code null} if fewer than two blocks
 	 * are available (which should never realistically happen).

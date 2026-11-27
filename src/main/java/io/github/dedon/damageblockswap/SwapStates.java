@@ -22,18 +22,42 @@ import java.util.Map;
  * distance=7}, i.e. "far from any log", and decay on the next random tick, so stone turned into leaves
  * crumbled into a carpet of saplings.
  *
- * <p>The result only depends on the old state and the new block, so it is cached. Server thread only
- * (as all chunk work is).
+ * <p>The result only depends on the old state and the new block, so it is cached. The cache is not
+ * synchronized: it may only be used from one thread (the server thread, as all chunk work is). That is
+ * checked, and {@link #clear()} (on every server start and stop) frees it and forgets that thread.
  */
 final class SwapStates {
 	// target block -> (source state -> state to place). States are registry singletons, so identity maps.
 	private static final Map<Block, Reference2ReferenceOpenHashMap<BlockState, BlockState>> CACHE = new IdentityHashMap<>();
+	// The thread that uses the cache; null until the first use after clear().
+	private static Thread owner;
 
 	private SwapStates() {
 	}
 
+	/** Empties the cache and lets the next caller's thread own it. Call when no chunk work runs. */
+	static synchronized void clear() {
+		CACHE.clear();
+		owner = null;
+	}
+
+	private static void checkThread() {
+		Thread current = Thread.currentThread();
+		if (owner != current) {
+			synchronized (SwapStates.class) {
+				if (owner == null) {
+					owner = current;
+				} else if (owner != current) {
+					throw new IllegalStateException("SwapStates used from " + current.getName()
+							+ " but owned by " + owner.getName() + "; chunk work must stay on the server thread");
+				}
+			}
+		}
+	}
+
 	/** The state of {@code target} that replaces {@code source}. */
 	static BlockState convert(BlockState source, Block target) {
+		checkThread();
 		Reference2ReferenceOpenHashMap<BlockState, BlockState> byTarget =
 				CACHE.computeIfAbsent(target, t -> new Reference2ReferenceOpenHashMap<>());
 		BlockState result = byTarget.get(source);

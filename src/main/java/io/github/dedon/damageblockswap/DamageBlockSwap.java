@@ -170,6 +170,7 @@ public class DamageBlockSwap implements ModInitializer {
 	/** Drops all per-world runtime state (pending chunk work, player tracking, cooldowns). */
 	private void resetSessionState() {
 		worldSwapService.reset();
+		SwapStates.clear(); // a new server runs on a new thread
 		lastSwapTick.clear();
 		pendingHits.clear();
 	}
@@ -239,12 +240,12 @@ public class DamageBlockSwap implements ModInitializer {
 		// count; checked before the cooldown so it doesn't use it up.
 		if (damageTypeFilter.ignores(source, serverLevel.registryAccess())) return;
 
-		// Per-player cooldown so rapid damage (fire, cactus, a mob's hits) doesn't spam swaps.
+		// Per-player cooldown so rapid damage (fire, cactus, a mob's hits) doesn't spam swaps. It is
+		// only used up below, once the hit really added a rule.
+		int now = server.getTickCount();
 		if (Config.cooldownTicks > 0) {
-			int now = server.getTickCount();
 			Integer last = lastSwapTick.get(player.getUUID());
 			if (last != null && now - last < Config.cooldownTicks) return;
-			lastSwapTick.put(player.getUUID(), now);
 		}
 
 		BlockPos playerPos = player.blockPosition();
@@ -268,6 +269,9 @@ public class DamageBlockSwap implements ModInitializer {
 			added.add(pair);
 		}
 		if (added.isEmpty()) return;
+		if (Config.cooldownTicks > 0) {
+			lastSwapTick.put(player.getUUID(), now);
+		}
 
 		// Written, announced and applied around the player at the end of this tick (saveNewRules).
 		pendingHits.add(new PendingHit(player, serverLevel, playerPos.getX() >> 4, playerPos.getZ() >> 4, added));

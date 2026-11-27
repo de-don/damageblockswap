@@ -15,14 +15,18 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.block.state.properties.Half;
 
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -32,6 +36,42 @@ class SwapStatesTest {
 	static void bootstrap() {
 		SharedConstants.tryDetectVersion();
 		Bootstrap.bootStrap();
+	}
+
+	// The cache belongs to the first thread that uses it; each test starts with a free one.
+	@BeforeEach
+	@AfterEach
+	void freeCache() {
+		SwapStates.clear();
+	}
+
+	private static Throwable convertOnAnotherThread() throws InterruptedException {
+		AtomicReference<Throwable> error = new AtomicReference<>();
+		Thread other = new Thread(() -> {
+			try {
+				SwapStates.convert(Blocks.STONE.defaultBlockState(), Blocks.DIRT);
+			} catch (Throwable t) {
+				error.set(t);
+			}
+		});
+		other.start();
+		other.join();
+		return error.get();
+	}
+
+	@Test
+	void cacheRefusesASecondThread() throws InterruptedException {
+		SwapStates.convert(Blocks.STONE.defaultBlockState(), Blocks.DIRT);
+
+		assertInstanceOf(IllegalStateException.class, convertOnAnotherThread());
+	}
+
+	@Test
+	void clearLetsANewThreadOwnTheCache() throws InterruptedException {
+		SwapStates.convert(Blocks.STONE.defaultBlockState(), Blocks.DIRT);
+		SwapStates.clear(); // what a server stop / the next server's start does
+
+		assertEquals(null, convertOnAnotherThread());
 	}
 
 	@Test

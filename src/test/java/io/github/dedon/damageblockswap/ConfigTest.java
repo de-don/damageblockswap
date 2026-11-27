@@ -21,15 +21,52 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ConfigTest {
 	private Locale originalLocale;
+	// Config is global static state: every test puts it back so other test classes don't depend on the order.
+	private int swapsPerHit;
+	private boolean chatMessages;
+	private boolean logging;
+	private boolean enableLiquids;
+	private boolean enableGravityBlocks;
+	private int cooldownTicks;
+	private boolean updateNeighbors;
+	private boolean pickFromNearbyChunks;
+	private int swapRadius;
+	private List<String> blacklist;
+	private List<String> ignoredDamageTypes;
+	private int generation;
 
 	@BeforeEach
-	void rememberLocale() {
+	void rememberGlobals() {
 		originalLocale = Locale.getDefault();
+		swapsPerHit = Config.swapsPerHit;
+		chatMessages = Config.chatMessages;
+		logging = Config.logging;
+		enableLiquids = Config.enableLiquids;
+		enableGravityBlocks = Config.enableGravityBlocks;
+		cooldownTicks = Config.cooldownTicks;
+		updateNeighbors = Config.updateNeighbors;
+		pickFromNearbyChunks = Config.pickFromNearbyChunks;
+		swapRadius = Config.swapRadius;
+		blacklist = Config.blacklist;
+		ignoredDamageTypes = Config.ignoredDamageTypes;
+		generation = Config.generation;
 	}
 
 	@AfterEach
-	void restoreLocale() {
+	void restoreGlobals() {
 		Locale.setDefault(originalLocale);
+		Config.swapsPerHit = swapsPerHit;
+		Config.chatMessages = chatMessages;
+		Config.logging = logging;
+		Config.enableLiquids = enableLiquids;
+		Config.enableGravityBlocks = enableGravityBlocks;
+		Config.cooldownTicks = cooldownTicks;
+		Config.updateNeighbors = updateNeighbors;
+		Config.pickFromNearbyChunks = pickFromNearbyChunks;
+		Config.swapRadius = swapRadius;
+		Config.blacklist = blacklist;
+		Config.ignoredDamageTypes = ignoredDamageTypes;
+		Config.generation = generation + 1; // still "changed", so no cache keeps what a test loaded
 	}
 
 	@Test
@@ -124,6 +161,29 @@ class ConfigTest {
 		assertEquals(0, Config.cooldownTicks);
 		Config.loadFrom(file);
 		assertEquals(0, Config.cooldownTicks);
+	}
+
+	@Test
+	void oldFileWithoutVersionOrCooldownGetsTheNewDefault(@TempDir Path dir) throws IOException {
+		Path file = dir.resolve("damageblockswap.json");
+		Files.writeString(file, "{\"swapsPerHit\": 3}");
+
+		Config.loadFrom(file);
+
+		assertEquals(Config.DEFAULT_COOLDOWN_TICKS, Config.cooldownTicks);
+		assertEquals(3, Config.swapsPerHit);
+		JsonObject written = JsonParser.parseString(Files.readString(file)).getAsJsonObject();
+		assertEquals(Config.CONFIG_VERSION, written.get("configVersion").getAsInt());
+		assertEquals(Config.DEFAULT_COOLDOWN_TICKS, written.get("cooldownTicks").getAsInt());
+	}
+
+	@Test
+	void settingsScreenListsAreStoredNormalized() {
+		Config.setBlacklist(Arrays.asList(" Stone ", "#Logs", null));
+		Config.setIgnoredDamageTypes(List.of("FALL"));
+
+		assertEquals(List.of("minecraft:stone", "#minecraft:logs"), Config.blacklist);
+		assertEquals(List.of("minecraft:fall"), Config.ignoredDamageTypes);
 	}
 
 	@Test
