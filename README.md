@@ -155,8 +155,11 @@ players with a vanilla client see them in English.
 **Options → Controls → Miscellaneous → "Open Swap Map"** (unbound by default — assign a key).
 Pressing it opens a scrollable list of every swap so far. Requires Cloth Config; otherwise use
 `/dbs list`.
-The map (and the Mod Menu "Swap Map" tab) only works in single-player and for the player hosting a
-LAN world; on a dedicated server or as a LAN guest it says so — use `/dbs list` there.
+The map (and the Mod Menu "Swap Map" tab) works in single-player, for the LAN host, and on a
+dedicated server or as a LAN guest when the server has the mod too: the server sends its swap map to
+every client with the mod when they join and after every new rule. Players with a vanilla client are
+not sent anything and play as usual. On a server without the mod (or with a version before 1.1.0)
+the screen says it has no map — use `/dbs list` there if the server has the mod.
 
 ## Building
 

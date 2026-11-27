@@ -186,9 +186,22 @@ public final class SwapTracker {
 		return JournalFile.FORMAT;
 	}
 
+	/** Every changed block type (original -> current), sorted by id; includes rules not saved yet. */
 	public static Map<Block, Block> allChanges() {
+		return sortedById(store.journal().changes());
+	}
+
+	/**
+	 * Like {@link #allChanges()}, but only the rules on disk: what chunks are brought up to and what
+	 * was announced. This is what clients are sent ({@link SwapMapSync}).
+	 */
+	public static Map<Block, Block> savedChanges() {
+		return sortedById(store.journal().mapping(0, store.persistedVersion()));
+	}
+
+	private static Map<Block, Block> sortedById(Map<Block, Block> unordered) {
 		Map<Block, Block> changes = new LinkedHashMap<>();
-		store.journal().changes().entrySet().stream()
+		unordered.entrySet().stream()
 				.sorted((x, y) -> idOf(x.getKey()).compareTo(idOf(y.getKey())))
 				.forEach(e -> changes.put(e.getKey(), e.getValue()));
 		return changes;

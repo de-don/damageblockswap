@@ -7,8 +7,8 @@ Tag `v1.1.0` is set only after plan item 5 is done (see below). Source: the fina
 
 - [ ] **Item 5 of the hardening plan** (the release waits for it): ~~admin commands
       (`/dbs undo|pause|resume|add|reload|status`, permission level 2+)~~ done in 5a, `reset` deferred
-      (docs/decisions.md); S2C packet that syncs
-      the swap map to clients (client stays optional, check `canSend`), ~~server messages through
+      (docs/decisions.md); ~~S2C packet that syncs
+      the swap map to clients (client stays optional, check `canSend`)~~ done in 5b, ~~server messages through
       `translatableWithFallback` + `ru_ru.json`~~ (5a), pin the Loom version (not SNAPSHOT), Mod Menu/Cloth via
       `clientCompileOnly` + `localRuntime`, `gradle/actions/setup-gradle` in CI.
 - [ ] **Settings UI for ignored damage types.** Today `ignoredDamageTypes` is a plain list of ids/#tags
@@ -31,7 +31,10 @@ Tag `v1.1.0` is set only after plan item 5 is done (see below). Source: the fina
       without Cloth and Mod Menu; LAN with a guest (both players see rules and the chat message);
       vanilla client joining a modded server. Item 5a adds: `/dbs` admin commands by an op and a
       non-op on a dedicated server; chat messages in Russian with the mod and in English on a vanilla
-      client; `/dbs reload` after editing the config of a running server.
+      client; `/dbs reload` after editing the config of a running server. Item 5b adds: swap map
+      screen of a modded client on a dedicated server and as a LAN guest (shows the server's rules,
+      updated after a hit when reopened, nothing stale after switching servers); a vanilla client
+      is not kicked.
 - [ ] Create tag `v1.1.0`; GitHub Actions builds and attaches the jar. Only on the user's "yes".
 
 ## Optional, can wait for 1.1.1

@@ -17,7 +17,10 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/** The swap map must not claim "nothing swapped" on a client that can't see the server's rules. */
+/**
+ * Where the swap map screen takes its lines from (local rule book, the server's copy, or neither) and
+ * what it says; it must never claim "nothing swapped" when it can't see the server's rules.
+ */
 class SwapMapLinesTest {
 	@BeforeAll
 	static void bootstrap() {
@@ -32,9 +35,47 @@ class SwapMapLinesTest {
 		return changes;
 	}
 
+	private static List<String> text(List<Component> lines) {
+		return lines.stream().map(Component::getString).toList();
+	}
+
+	private static SyncedSwapMap dirtGlass() {
+		return new SyncedSwapMap(true, 2, Map.of(Blocks.DIRT, Blocks.GLASS, Blocks.GLASS, Blocks.DIRT));
+	}
+
+	private static SyncedSwapMap incompatible() {
+		return new SyncedSwapMap(false, 0, Map.of());
+	}
+
+	// --- source choice -------------------------------------------------------------------------
+
 	@Test
-	void remoteClientGetsHonestHintEvenWithoutRules() {
-		List<Component> lines = SwapMapLines.of(false, Map.of());
+	void hostReadsTheLocalRuleBookEvenIfTheServerSentACopy() {
+		assertEquals(SwapMapLines.Source.LOCAL, SwapMapLines.source(true, null));
+		assertEquals(SwapMapLines.Source.LOCAL, SwapMapLines.source(true, dirtGlass()));
+		assertEquals(SwapMapLines.Source.LOCAL, SwapMapLines.source(true, incompatible()));
+	}
+
+	@Test
+	void remoteClientUsesTheServersCopy() {
+		assertEquals(SwapMapLines.Source.SYNCED, SwapMapLines.source(false, dirtGlass()));
+	}
+
+	@Test
+	void remoteClientWithoutCopyHasNoMap() {
+		assertEquals(SwapMapLines.Source.UNAVAILABLE, SwapMapLines.source(false, null));
+	}
+
+	@Test
+	void remoteClientWithUnreadableCopyIsTold() {
+		assertEquals(SwapMapLines.Source.INCOMPATIBLE, SwapMapLines.source(false, incompatible()));
+	}
+
+	// --- lines ---------------------------------------------------------------------------------
+
+	@Test
+	void serverWithoutTheModGetsHonestHint() {
+		List<Component> lines = SwapMapLines.of(false, Map.of(), null);
 		assertEquals(1, lines.size());
 		String text = lines.getFirst().getString();
 		assertEquals(SwapMapLines.UNAVAILABLE, text);
@@ -45,19 +86,53 @@ class SwapMapLinesTest {
 	@Test
 	void remoteClientIgnoresWhateverTheLocalTrackerHolds() {
 		// A stale local rule book must not be shown as if it were the server's.
-		List<Component> lines = SwapMapLines.of(false, oneSwap());
-		assertEquals(List.of(SwapMapLines.UNAVAILABLE), lines.stream().map(Component::getString).toList());
+		assertEquals(List.of(SwapMapLines.UNAVAILABLE), text(SwapMapLines.of(false, oneSwap(), null)));
+		List<String> synced = text(SwapMapLines.of(false, oneSwap(), dirtGlass()));
+		assertEquals("2 block type(s) changed:", synced.getFirst());
+		assertFalse(synced.stream().anyMatch(l -> l.contains(Blocks.STONE.getName().getString())));
+	}
+
+	@Test
+	void incompatibleServerSaysSo() {
+		assertEquals(List.of(SwapMapLines.INCOMPATIBLE), text(SwapMapLines.of(false, Map.of(), incompatible())));
+	}
+
+	@Test
+	void syncedEmptyMapSaysNothingSwapped() {
+		SyncedSwapMap empty = new SyncedSwapMap(true, 0, Map.of());
+		assertEquals(List.of(SwapMapLines.EMPTY), text(SwapMapLines.of(false, Map.of(), empty)));
+	}
+
+	@Test
+	void syncedMapListsTheServersRulesInOrder() {
+		Map<Block, Block> changes = new LinkedHashMap<>();
+		changes.put(Blocks.DIRT, Blocks.GLASS);
+		changes.put(Blocks.GLASS, Blocks.DIRT);
+		String dirt = Blocks.DIRT.getName().getString();
+		String glass = Blocks.GLASS.getName().getString();
+		assertEquals(List.of("2 block type(s) changed:", dirt + " → " + glass, glass + " → " + dirt),
+				text(SwapMapLines.of(false, Map.of(), new SyncedSwapMap(true, 2, changes))));
+	}
+
+	@Test
+	void syncedMapSaysHowManyAreNotShown() {
+		// Capped packet, or blocks this client doesn't know: the total still counts them.
+		SyncedSwapMap partial = new SyncedSwapMap(true, 5, Map.of(Blocks.DIRT, Blocks.GLASS));
+		List<String> lines = text(SwapMapLines.of(false, Map.of(), partial));
+		assertEquals(3, lines.size());
+		assertEquals("5 block type(s) changed:", lines.getFirst());
+		assertTrue(lines.getLast().contains("4 more"));
+		assertTrue(lines.getLast().contains("/dbs list"));
 	}
 
 	@Test
 	void hostWithoutRulesSaysNothingSwapped() {
-		List<Component> lines = SwapMapLines.of(true, Map.of());
-		assertEquals(List.of(SwapMapLines.EMPTY), lines.stream().map(Component::getString).toList());
+		assertEquals(List.of(SwapMapLines.EMPTY), text(SwapMapLines.of(true, Map.of(), null)));
 	}
 
 	@Test
 	void hostSeesEveryRule() {
-		List<String> lines = SwapMapLines.of(true, oneSwap()).stream().map(Component::getString).toList();
+		List<String> lines = text(SwapMapLines.of(true, oneSwap(), dirtGlass()));
 		String stone = Blocks.STONE.getName().getString();
 		String sand = Blocks.SAND.getName().getString();
 		assertEquals(List.of("2 block type(s) changed:", stone + " → " + sand, sand + " → " + stone), lines);

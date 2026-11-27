@@ -13,6 +13,11 @@
   to everyone.
 - Chat messages and command replies are translatable (English, Russian), with an English fallback for
   vanilla clients.
+- The swap map is synced to clients: the swap map screen and the Mod Menu "Swap Map" tab now work on
+  a dedicated server and for LAN guests, when both the server and the client have the mod. The server
+  sends the saved map when a player joins and after every new rule (a small packet of block ids).
+  Players without the mod get nothing and are not affected; on a server without the mod the screen
+  says so and points to `/dbs list`.
 
 ### Fixed
 - After the journal could not be saved for a long time, the rules are no longer announced one line
@@ -27,8 +32,7 @@
   player who got hurt (`Steve got hurt: Stone ↔ Sand`). If the rule book could not be saved, the
   message comes once a retry saves it instead of never.
 - The swap map screen and the Mod Menu "Swap Map" tab no longer say "No blocks have been swapped yet"
-  on a dedicated server or as a LAN guest, where they can't see the server's rules; they point to
-  `/dbs list` instead.
+  on a server they can't see the rules of (one without the mod); they point to `/dbs list` instead.
 
 ### Changed
 - Reliable swap journal: atomic writes with fsync, corrupt files set aside as `.corrupt-<date>`,
@@ -54,8 +58,6 @@
 - A hit that adds no rule no longer starts the cooldown.
 
 ### Known issues
-- The swap map is not synced to clients: it only works in single-player or for the LAN host.
-  On a server use `/dbs list`.
 - Damage from lava, magma or cactus still causes swaps, so a rule that surrounds you with them can
   repeat once per cooldown.
 - A world whose 1.0.x session crashed right after a rule for an unknown block may apply one rule twice.

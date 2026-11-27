@@ -118,6 +118,8 @@ public class DamageBlockSwap implements ModInitializer {
 		// rules are on disk before the chunk pump of the same tick may apply them.
 		ServerTickEvents.END_SERVER_TICK.register(this::saveNewRules);
 		worldSwapService.registerEvents(); // catches chunks up to the rule book, a little each tick
+		// Sends the swap map to clients that have the mod (on join and after every save).
+		SwapMapSync.register();
 
 		// Fires AFTER a living entity has taken damage. Parameters:
 		//   entity           - who got hit
@@ -259,6 +261,7 @@ public class DamageBlockSwap implements ModInitializer {
 			if (server.getTickCount() % SAVE_RETRY_INTERVAL_TICKS == 0 && SwapTracker.saveIfDirty()) {
 				// Rules that were stuck in memory are on disk now, so chunks may catch up to them.
 				worldSwapService.refreshAroundAllPlayers();
+				SwapMapSync.sendToAll(server);
 				announceAll(server, unsavedHits.drain());
 			}
 			return;
@@ -281,6 +284,8 @@ public class DamageBlockSwap implements ModInitializer {
 		// chunks only join the de-duplicated queue and are worked off within the usual per-tick budget,
 		// a chunk already mid-pass keeps its saved progress.
 		worldSwapService.refreshAroundAllPlayers();
+		// One packet per save (per tick at most), with the whole saved map.
+		SwapMapSync.sendToAll(server);
 		announceAll(server, unsavedHits.drain());
 	}
 
