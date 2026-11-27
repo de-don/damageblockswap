@@ -28,7 +28,7 @@
 
 ### Fixed
 - After the journal could not be saved for a long time, the rules are no longer announced one line
-  each once it saves again: at most 20 lines, then one "...and N more new rules" line. Hits waiting
+  each once it saves again (in normal play too): at most 20 lines, then one "...and N more new rules" line. Hits waiting
   for a save no longer pile up in memory without a limit.
 - Crashes and compatibility: Mod Menu works without Cloth Config, `/dbs lookup` accepts block
   ids correctly, locale-independent id handling, fake players ignored, per-dimension player chunk tracking.

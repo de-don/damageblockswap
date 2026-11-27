@@ -25,7 +25,7 @@ Tag `v1.1.0` is set only after plan item 5 is done (see below). Source: the fina
 - [ ] **Version and CHANGELOG.** `mod_version` stays `1.1.0`. All changes (items 1-5) live in the single
       `1.1.0` section; add item 5 to it and re-read the Known issues (the map sync fixes the first one).
       Keep the "back up your world, no downgrade" warning at the top.
-- [ ] **Merge PR #2** (`safe-rules` -> `main`), then run `./gradlew build` on the final commit (unit tests
+- [ ] **Merge the item 5 PR** (`commands-sync` -> `main`; PR #2 is already merged), then run `./gradlew build` on the final commit (unit tests
       + gametests) and wait for CI.
 - [ ] **Live checks on the final jar:** old 1.0.x world -> update -> hits -> restart; dedicated server
       without Cloth and Mod Menu; LAN with a guest (both players see rules and the chat message);
@@ -70,3 +70,12 @@ From the Opus review, minor findings:
 - [ ] Known-issues candidates: damage from lava/magma/cactus can loop one rule per cooldown (a safe
       zone around the player was not built); some unstable blocks (corals, copper, concrete powder,
       sponge, eggs) are not in `never_swap`; `powered`/`lit` can stay stuck until a neighbour update.
+
+## Found in the item 5 review (minor, can wait for 1.1.1)
+
+- [ ] Map-sync packets are not rate limited: every saved rule sends the whole map (~1200 pairs, a few KB)
+      to every modded client, up to 20 times a second if an op's command block calls `/dbs add` every tick.
+- [ ] The Swap Map tab opened from the main menu (no connection) shows "this server has not sent its map".
+      Add a separate "not in a world" state (`SwapMapScreen.addSwapEntries`, `getConnection() == null`).
+- [ ] Test gaps: `/dbs reload` only checks the return code (not that the new value is applied),
+      no gametests for `/dbs undo` on an empty journal and `/dbs add` on a read-only journal.
