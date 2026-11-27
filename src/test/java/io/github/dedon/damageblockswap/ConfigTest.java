@@ -194,7 +194,7 @@ class ConfigTest {
 
 		assertEquals(Config.DEFAULT_COOLDOWN_TICKS, Config.cooldownTicks);
 		assertEquals(List.of("#damageblockswap:ignored"), Config.ignoredDamageTypes);
-		assertTrue(Config.blacklist.isEmpty());
+		assertEquals(List.of("minecraft:obsidian", "minecraft:crying_obsidian"), Config.blacklist);
 		JsonObject written = JsonParser.parseString(Files.readString(file)).getAsJsonObject();
 		assertEquals(Config.CONFIG_VERSION, written.get("configVersion").getAsInt());
 	}
@@ -228,5 +228,25 @@ class ConfigTest {
 		Config.loadFrom(file);
 
 		assertEquals(List.of("minecraft:fall", "#minecraft:is_fire"), Config.ignoredDamageTypes);
+	}
+
+	@Test
+	void obsidianCanBeRemovedFromTheBlacklistAndStaysRemoved(@TempDir Path dir) throws IOException {
+		Path file = dir.resolve("damageblockswap.json");
+		Files.writeString(file, "{\"configVersion\": 2, \"blacklist\": []}");
+
+		Config.loadFrom(file);
+
+		assertTrue(Config.blacklist.isEmpty());
+	}
+
+	@Test
+	void oldConfigWithAnEmptyBlacklistGetsTheDefaultsOnce(@TempDir Path dir) throws IOException {
+		Path file = dir.resolve("damageblockswap.json");
+		Files.writeString(file, "{\"blacklist\": []}");
+
+		Config.loadFrom(file);
+
+		assertEquals(List.of("minecraft:obsidian", "minecraft:crying_obsidian"), Config.blacklist);
 	}
 }

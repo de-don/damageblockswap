@@ -32,6 +32,8 @@ public final class Config {
 	 * 2: default cooldown became {@value #DEFAULT_COOLDOWN_TICKS}, {@code ignoredDamageTypes} added.
 	 */
 	static final int CONFIG_VERSION = 2;
+	/** Excluded by default but removable in the settings (unlike the fixed damageblockswap:never_swap tag). */
+	static final List<String> DEFAULT_BLACKLIST = List.of("minecraft:obsidian", "minecraft:crying_obsidian");
 	static final int DEFAULT_COOLDOWN_TICKS = 20;
 	/** By default the damage types in this tag don't trigger swaps (see the tag file for the list). */
 	static final List<String> DEFAULT_IGNORED_DAMAGE_TYPES = List.of("#" + DamageBlockSwap.MOD_ID + ":ignored");
@@ -57,7 +59,7 @@ public final class Config {
 	 * Block ids ({@code "minecraft:bedrock"}) and block tags ({@code "#minecraft:logs"}) that are never
 	 * picked for a new swap rule. Normalized on load. Only affects new rules, never rules already made.
 	 */
-	public static volatile List<String> blacklist = new ArrayList<>();
+	public static volatile List<String> blacklist = new ArrayList<>(DEFAULT_BLACKLIST);
 	/** Damage type ids and {@code #tags} that don't trigger swaps. Normalized on load. */
 	public static volatile List<String> ignoredDamageTypes = new ArrayList<>(DEFAULT_IGNORED_DAMAGE_TYPES);
 
@@ -86,8 +88,8 @@ public final class Config {
 		int configVersion = 0;
 		String _help_swapsPerHit = "How many random block swaps happen each time you take damage (1-100).";
 		int swapsPerHit = 1;
-		String _help_blacklist = "Blocks that are never picked for a new swap, as ids or #tags, e.g. [\"minecraft:diamond_ore\", \"#minecraft:logs\"]. The \"minecraft:\" prefix is optional. Rules that already exist are not affected. A safe set (bedrock, portals, barriers, fire, doors, tall plants, ...) is always excluded through the block tag damageblockswap:never_swap, which a datapack can change.";
-		List<String> blacklist = new ArrayList<>();
+		String _help_blacklist = "Blocks that are never picked for a new swap, as ids or #tags, e.g. [\"minecraft:diamond_ore\", \"#minecraft:logs\"]. The \"minecraft:\" prefix is optional. Rules that already exist are not affected. Obsidian and crying obsidian are listed by default (so nobody gets locked out of the Nether); remove them here to allow swapping them. A fixed safe set (bedrock, portals, barriers, fire, doors, tall plants, ...) is always excluded through the block tag damageblockswap:never_swap, which a datapack can change.";
+		List<String> blacklist = new ArrayList<>(DEFAULT_BLACKLIST);
 		boolean chatMessages = true;
 		boolean logging = true;
 		boolean enableLiquids = true;
@@ -159,6 +161,9 @@ public final class Config {
 				data.cooldownTicks = DEFAULT_COOLDOWN_TICKS;
 				LOGGER.info("Config: cooldownTicks raised from 0 (the old default) to {} ticks. Set it back to 0"
 						+ " in config/{}.json if you really want no cooldown.", DEFAULT_COOLDOWN_TICKS, DamageBlockSwap.MOD_ID);
+			}
+			if (data.blacklist == null || data.blacklist.isEmpty()) {
+				data.blacklist = new ArrayList<>(DEFAULT_BLACKLIST); // the old mod wrote an empty list, i.e. "never changed"
 			}
 			data.configVersion = 2;
 		}

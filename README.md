@@ -115,7 +115,7 @@ automatically when you update the mod). Edit it directly or use the in-game scre
 | `ignoredDamageTypes` | `["#damageblockswap:ignored"]` | Damage types that do **not** cause a swap, as ids or `#tags`, e.g. `["minecraft:fall", "#minecraft:is_fire"]`. `[]` = every damage swaps. |
 | `chatMessages` | `true` | Announce each swap in chat. |
 | `logging` | `true` | Log swaps to the console/log file. |
-| `blacklist` | `[]` | Blocks never picked for a new swap, as ids or `#tags`, e.g. `["diamond_ore", "#minecraft:logs", "#c:storage_blocks"]`. The `minecraft:` prefix is optional. Entries that match no block are reported in the log at server start. Comes on top of the `damageblockswap:never_swap` tag. |
+| `blacklist` | `["minecraft:obsidian", "minecraft:crying_obsidian"]` | Blocks never picked for a new swap, as ids or `#tags`, e.g. `["diamond_ore", "#minecraft:logs", "#c:storage_blocks"]`. The `minecraft:` prefix is optional. Entries that match no block are reported in the log at server start. Comes on top of the `damageblockswap:never_swap` tag, which is fixed (bedrock, portals, barriers, ...), while this list is yours to edit: obsidian is there by default so a swap cannot destroy a Nether portal frame, remove it to allow that. |
 
 ## Commands
 
