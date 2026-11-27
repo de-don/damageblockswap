@@ -83,13 +83,18 @@ public class DamageBlockSwap implements ModInitializer {
 	// Per-player server-tick of the last swap, for the cooldown.
 	private final Map<UUID, Integer> lastSwapTick = new HashMap<>();
 
-	/** A hit that added rules this tick; shown (chat + area refresh) once the rules are on disk. */
-	private record PendingHit(Player player, ServerLevel level, int chunkX, int chunkZ,
-	                          List<RandomSwapService.BlockPair> pairs) {
+	/**
+	 * A hit that added rules; announced to everyone (and applied around every player) once the rules
+	 * are on disk. Keeps the player's name, not the player: a hit whose write failed may only be
+	 * announced after a retry, by when the player may have left.
+	 */
+	private record PendingHit(Component playerName, List<RandomSwapService.BlockPair> pairs) {
 	}
 
 	// Hits of the current tick. Their rules are written once, together, at the end of the tick.
 	private final List<PendingHit> pendingHits = new ArrayList<>();
+	// Hits whose rules could not be written yet; announced once a retry writes them.
+	private final List<PendingHit> unsavedHits = new ArrayList<>();
 
 	// The rule book is written at the end of every tick in which hits added rules. If that write
 	// failed, it is retried this often (in ticks); until then the new rules are not applied anywhere.
@@ -173,48 +178,56 @@ public class DamageBlockSwap implements ModInitializer {
 		SwapStates.clear(); // a new server runs on a new thread
 		lastSwapTick.clear();
 		pendingHits.clear();
+		unsavedHits.clear();
 	}
 
 	/**
 	 * End of tick: puts the rules added by this tick's hits on disk in one write (one write per tick
-	 * however many players got hurt), and only then announces them and refreshes the area around the
-	 * hit players. Chunks are only ever advanced to the saved version, so if the write fails nothing in
-	 * the world changes, nothing is announced, and a crash can't leave chunks ahead of the journal
-	 * file. A failed write is retried every {@link #SAVE_RETRY_INTERVAL_TICKS}.
+	 * however many players got hurt), and only then announces them to every player and refreshes the
+	 * area around every player: a rule is global, so a player who wasn't hit must see it too, and not
+	 * only once they cross a chunk border. Chunks are only ever advanced to the saved version, so if
+	 * the write fails nothing in the world changes, nothing is announced, and a crash can't leave
+	 * chunks ahead of the journal file. A failed write is retried every
+	 * {@link #SAVE_RETRY_INTERVAL_TICKS}; its hits are announced once it succeeds.
 	 */
 	private void saveNewRules(MinecraftServer server) {
 		if (pendingHits.isEmpty()) {
 			if (server.getTickCount() % SAVE_RETRY_INTERVAL_TICKS == 0 && SwapTracker.saveIfDirty()) {
 				// Rules that were stuck in memory are on disk now, so chunks may catch up to them.
 				worldSwapService.refreshAroundAllPlayers();
+				announceAll(server, unsavedHits);
+				unsavedHits.clear();
 			}
 			return;
 		}
 
-		List<PendingHit> hits = List.copyOf(pendingHits);
+		unsavedHits.addAll(pendingHits);
 		pendingHits.clear();
-		int savedBefore = SwapTracker.persistedVersion();
-		int addedThisTick = 0;
-		for (PendingHit hit : hits) {
-			addedThisTick += hit.pairs().size();
-		}
 		if (!SwapTracker.flush()) {
 			return; // logged; the rules stay in memory, unapplied and unannounced, until a retry works
 		}
-		if (SwapTracker.persistedVersion() - savedBefore > addedThisTick) {
-			worldSwapService.refreshAroundAllPlayers(); // older rules that had been stuck got saved too
-		}
+		// One refresh for all of this tick's hits, however many. WorldSwapService's end-of-tick listener
+		// runs after this one (see onInitialize), so the areas are re-checked in this same tick; the
+		// chunks only join the de-duplicated queue and are worked off within the usual per-tick budget,
+		// a chunk already mid-pass keeps its saved progress.
+		worldSwapService.refreshAroundAllPlayers();
+		announceAll(server, unsavedHits);
+		unsavedHits.clear();
+	}
+
+	private void announceAll(MinecraftServer server, List<PendingHit> hits) {
 		for (PendingHit hit : hits) {
-			for (RandomSwapService.BlockPair pair : hit.pairs()) {
-				announce(hit.player(), pair);
+			if (Config.chatMessages) {
+				for (RandomSwapService.BlockPair pair : hit.pairs()) {
+					// To every player and the server console (broadcastSystemMessage logs it too).
+					server.getPlayerList().broadcastSystemMessage(
+							SwapAnnouncement.of(hit.playerName(), pair.a(), pair.b()), false);
+				}
 			}
-			// Refresh the loaded area around the player now; as the player moves, more chunks catch up,
-			// and brand-new chunks catch up when they load. Everything is throttled per tick.
-			worldSwapService.onHit(hit.level(), hit.chunkX(), hit.chunkZ());
 			if (Config.logging) {
-				LOGGER.info("Player {} took damage. Added {} rule(s), version now {}, {} chunks queued.",
-						hit.player().getName().getString(), hit.pairs().size(), SwapTracker.version(),
-						worldSwapService.queueSize());
+				// No queue size here: the areas are only queued later in this tick (refreshAroundAllPlayers).
+				LOGGER.info("Player {} took damage. Added {} rule(s), version now {}.",
+						hit.playerName().getString(), hit.pairs().size(), SwapTracker.version());
 			}
 		}
 	}
@@ -273,17 +286,8 @@ public class DamageBlockSwap implements ModInitializer {
 			lastSwapTick.put(player.getUUID(), now);
 		}
 
-		// Written, announced and applied around the player at the end of this tick (saveNewRules).
-		pendingHits.add(new PendingHit(player, serverLevel, playerPos.getX() >> 4, playerPos.getZ() >> 4, added));
-	}
-
-	private void announce(Player player, RandomSwapService.BlockPair pair) {
-		if (Config.chatMessages) {
-			// Uses the localized block names, e.g. "Stone ↔ Sand".
-			Component message = pair.a().getName()
-					.append(Component.literal(" ↔ "))
-					.append(pair.b().getName());
-			player.sendSystemMessage(message);
-		}
+		// Written, then announced to everyone and applied around every player, at the end of this tick
+		// (saveNewRules). Several hits in one tick share one write and one refresh.
+		pendingHits.add(new PendingHit(player.getDisplayName(), added));
 	}
 }

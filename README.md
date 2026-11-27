@@ -113,7 +113,7 @@ automatically when you update the mod). Edit it directly or use the in-game scre
 | `enableGravityBlocks` | `true` | Allow sand, gravel and other falling blocks to be swapped. |
 | `cooldownTicks` | `20` | Minimum ticks between two swaps caused by the same player (20 = 1 second). 0 = no cooldown. A config from an older version that still has the old default `0` is raised to `20` once (logged); set `0` again if you want it. |
 | `ignoredDamageTypes` | `["#damageblockswap:ignored"]` | Damage types that do **not** cause a swap, as ids or `#tags`, e.g. `["minecraft:fall", "#minecraft:is_fire"]`. `[]` = every damage swaps. |
-| `chatMessages` | `true` | Announce each swap in chat. |
+| `chatMessages` | `true` | Announce each swap in chat, to every player, with the name of the player who got hurt. |
 | `logging` | `true` | Log swaps to the console/log file. |
 | `blacklist` | `["minecraft:obsidian", "minecraft:crying_obsidian"]` | Blocks never picked for a new swap, as ids or `#tags`, e.g. `["diamond_ore", "#minecraft:logs", "#c:storage_blocks"]`. The `minecraft:` prefix is optional. Entries that match no block are reported in the log at server start. Comes on top of the `damageblockswap:never_swap` tag, which is fixed (bedrock, portals, barriers, ...), while this list is yours to edit: obsidian is there by default so a swap cannot destroy a Nether portal frame, remove it to allow that. |
 
@@ -128,6 +128,8 @@ automatically when you update the mod). Edit it directly or use the in-game scre
 **Options → Controls → Miscellaneous → "Open Swap Map"** (unbound by default — assign a key).
 Pressing it opens a scrollable list of every swap so far. Requires Cloth Config; otherwise use
 `/dbs list`.
+The map (and the Mod Menu "Swap Map" tab) only works in single-player and for the player hosting a
+LAN world; on a dedicated server or as a LAN guest it says so — use `/dbs list` there.
 
 ## Building
 

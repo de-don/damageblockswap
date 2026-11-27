@@ -15,6 +15,16 @@
   the void, the world border and `/kill` no longer cause swaps by default (tag `damageblockswap:ignored`).
 - A hit that adds no rule no longer starts the cooldown.
 
+### Fixed (multiplayer)
+- A new rule now updates the area around **every** player right away, not only around the player
+  who got hurt (others used to see it only after crossing a chunk border).
+- New rules are announced to every player and the server console, with the name of the player who
+  got hurt: `Steve got hurt: Stone ↔ Sand`. If the rule book could not be saved, the message comes
+  once a retry saves it instead of never.
+- The swap map screen and the Mod Menu "Swap Map" tab no longer say "No blocks have been swapped yet"
+  on a dedicated server or as a LAN guest, where they can't see the server's rules; they point to
+  `/dbs list` instead.
+
 ## 1.1.0
 
 **Back up your world before updating. Downgrading to 1.0.x is not supported.**
