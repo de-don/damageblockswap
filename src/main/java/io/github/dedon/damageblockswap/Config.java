@@ -1,4 +1,4 @@
-package com.example;
+package io.github.dedon.damageblockswap;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
@@ -11,6 +11,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 /**
  * Simple JSON config, stored at {@code config/damageblockswap.json}.
@@ -27,7 +28,10 @@ public final class Config {
 	public static boolean enableLiquids = true;
 	public static boolean enableGravityBlocks = true;
 	public static int cooldownTicks = 0;
-	/** When true, swapped blocks trigger vanilla physics (falling, flowing). Off (default) = much faster. */
+	/**
+	 * When true, swaps use full block updates (neighbours react, unsupported blocks drop). Off (default)
+	 * = much faster, neighbours untouched; the placed block's own behaviour (falling, flowing) stays.
+	 */
 	public static boolean updateNeighbors = false;
 	/** When true, the two swapped block types are chosen from blocks actually near the player. */
 	public static boolean pickFromNearbyChunks = true;
@@ -61,7 +65,7 @@ public final class Config {
 		boolean enableLiquids = true;
 		boolean enableGravityBlocks = true;
 		int cooldownTicks = 0;
-		String _help_updateNeighbors = "Run vanilla physics after swaps (sand falls, water flows). WARNING: with many/common blocks this can cause severe multi-second lag. Leave off unless you know you want it.";
+		String _help_updateNeighbors = "Full vanilla block updates after swaps: neighbouring blocks react (redstone, connections, unsupported blocks break and drop). WARNING: with many/common blocks this can cause severe multi-second lag. Leave off unless you know you want it. Even when off, swapped-in sand/gravel still falls and swapped-in water/lava still flows.";
 		boolean updateNeighbors = false;
 		String _help_pickFromNearbyChunks = "Choose the swapped blocks from ones that actually exist near the player, so hits are always visible.";
 		boolean pickFromNearbyChunks = true;
@@ -155,7 +159,7 @@ public final class Config {
 	 * Cleans up blacklist entries so matching is forgiving: trims whitespace, lowercases,
 	 * drops blanks, and adds the {@code minecraft:} namespace when the user omitted it.
 	 */
-	private static List<String> normalizeBlacklist(List<String> raw) {
+	static List<String> normalizeBlacklist(List<String> raw) {
 		List<String> result = new ArrayList<>();
 		if (raw == null) {
 			return result;
@@ -164,7 +168,9 @@ public final class Config {
 			if (entry == null) {
 				continue;
 			}
-			String id = entry.trim().toLowerCase();
+			// Locale.ROOT: under e.g. a Turkish default locale "I" would lowercase to a dotless "ı"
+			// and the ID would silently stop matching.
+			String id = entry.trim().toLowerCase(Locale.ROOT);
 			if (id.isEmpty()) {
 				continue;
 			}

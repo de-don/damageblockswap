@@ -37,6 +37,6 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release create "${GITHUB_REF_NAME}" \
-            build/libs/damageblockswap-*.jar \
+            build/libs/damageblockswap-${{ steps.version.outputs.version }}.jar \
             --title "Damage Block Swap ${GITHUB_REF_NAME}" \
             --generate-notes

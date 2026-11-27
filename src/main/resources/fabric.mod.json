@@ -8,26 +8,29 @@
 		"denis"
 	],
 	"contact": {
+		"homepage": "https://github.com/de-don/damageblockswap",
+		"sources": "https://github.com/de-don/damageblockswap",
+		"issues": "https://github.com/de-don/damageblockswap/issues"
 	},
 	"license": "CC0-1.0",
 	"icon": "assets/damageblockswap/icon.png",
 	"environment": "*",
 	"entrypoints": {
 		"main": [
-			"com.example.DamageBlockSwap"
+			"io.github.dedon.damageblockswap.DamageBlockSwap"
 		],
 		"client": [
-			"com.example.client.DamageBlockSwapClient"
+			"io.github.dedon.damageblockswap.client.DamageBlockSwapClient"
 		],
 		"modmenu": [
-			"com.example.client.ModMenuIntegration"
+			"io.github.dedon.damageblockswap.client.ModMenuIntegration"
 		]
 	},
 	"depends": {
 		"fabricloader": ">=0.19.3",
 		"minecraft": "~26.1.2",
 		"java": ">=25",
-		"fabric-api": "*"
+		"fabric-api": ">=0.154.0+26.1.2"
 	},
 	"recommends": {
 		"modmenu": "*",

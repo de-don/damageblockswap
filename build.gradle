@@ -30,6 +30,28 @@ loom {
 	}
 }
 
+// Server gametests (src/gametest): `./gradlew runGameTest`, also run by `check`/`build`. They start a
+// dedicated test server with this mod and check behaviour that needs a real world (chunk save/load).
+fabricApi {
+	configureTests {
+		createSourceSet = true
+		modId = "damageblockswap-gametest"
+		enableGameTests = true
+		enableClientGameTests = false
+		// Accepts the Minecraft EULA for the throw-away test server (build/run/gameTest), on behalf of
+		// whoever runs `build`; see "Building" in README.md.
+		eula = true
+	}
+}
+
+// Every gametest run starts from a fresh world: the tests record swap rules and leave chunks with
+// saved swap data on disk, so a world kept from an earlier (or aborted) run would change what they see.
+tasks.matching { it.name == "runGameTest" }.configureEach { task ->
+	task.doFirst {
+		delete(new File(task.workingDir, "world"))
+	}
+}
+
 dependencies {
 	// To change the versions see the gradle.properties file
 	minecraft "com.mojang:minecraft:${project.minecraft_version}"
@@ -46,6 +68,20 @@ dependencies {
 		// Cloth bundles its own Fabric API build; we already provide one above.
 		exclude(group: "net.fabricmc.fabric-api")
 	}
+
+	// Plain JUnit for the pure-logic parts (no Minecraft bootstrap needed).
+	testImplementation platform("org.junit:junit-bom:5.13.4")
+	testImplementation "org.junit.jupiter:junit-jupiter"
+	testRuntimeOnly "org.junit.platform:junit-platform-launcher"
+}
+
+test {
+	useJUnitPlatform()
+	// Tests that run Minecraft's Bootstrap make log4j write logs/latest.log into the working
+	// directory; keep that inside build/ instead of the project root.
+	def testRunDir = layout.buildDirectory.dir("test-run").get().asFile
+	workingDir = testRunDir
+	doFirst { testRunDir.mkdirs() }
 }
 
 processResources {

@@ -1,4 +1,4 @@
-package com.example;
+package io.github.dedon.damageblockswap;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -133,17 +133,39 @@ public final class RandomSwapService {
 					if (section == null || section.hasOnlyAir()) {
 						continue;
 					}
-					// Ask the section's palette for the block types it holds (usually a few dozen)
-					// instead of reading all 16x16x16 = 4096 positions. Hugely cheaper.
-					section.getStates().count((state, count) -> {
-						Block block = state.getBlock();
-						if (allowedSet.contains(block)) {
-							found.add(block);
-						}
-					});
+					collectFromPalette(section, found);
 				}
 			}
 		}
 		return new ArrayList<>(found);
+	}
+
+	/**
+	 * Adds the swappable block types in the section's palette (usually a few dozen entries) to
+	 * {@code found}, without reading its 4096 positions.
+	 *
+	 * <p>{@code maybeHas} hands every palette entry to the predicate until it returns true; ours never
+	 * does, so it sees them all. A palette may still list a state that was since removed from the
+	 * section; picking such a block now and then is harmless. Only the global palette (sections with
+	 * hundreds of different states, rare) doesn't list its entries: it answers true without asking,
+	 * and then the section is counted the slow way. ({@code PalettedContainer.count}, used for every
+	 * section before, reads all 4096 positions whenever the palette has more than one entry.)
+	 */
+	private void collectFromPalette(LevelChunkSection section, Set<Block> found) {
+		boolean unlisted = section.maybeHas(state -> {
+			Block block = state.getBlock();
+			if (allowedSet.contains(block)) {
+				found.add(block);
+			}
+			return false;
+		});
+		if (unlisted) {
+			section.getStates().count((state, count) -> {
+				Block block = state.getBlock();
+				if (allowedSet.contains(block)) {
+					found.add(block);
+				}
+			});
+		}
 	}
 }
