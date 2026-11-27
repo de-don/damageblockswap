@@ -101,7 +101,7 @@ final class ClothConfigScreen {
 
 		general.addEntry(entry.startStrList(
 						Component.literal("Blacklisted blocks"), new ArrayList<>(Config.blacklist))
-				.setDefaultValue(new ArrayList<>())
+				.setDefaultValue(new ArrayList<>(Config.DEFAULT_BLACKLIST))
 				.setTooltip(Component.literal("Blocks never picked for a new swap: ids or #tags, e.g. minecraft:diamond_ore or #minecraft:logs. The \"minecraft:\" prefix is optional. Swaps that already happened are not affected. Bedrock, portals, barriers, fire, doors, tall plants and similar are always excluded (block tag damageblockswap:never_swap)."))
 				.setSaveConsumer(Config::setBlacklist)
 				.build());

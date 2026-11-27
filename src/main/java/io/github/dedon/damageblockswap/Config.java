@@ -33,7 +33,7 @@ public final class Config {
 	 */
 	static final int CONFIG_VERSION = 2;
 	/** Excluded by default but removable in the settings (unlike the fixed damageblockswap:never_swap tag). */
-	static final List<String> DEFAULT_BLACKLIST = List.of("minecraft:obsidian", "minecraft:crying_obsidian");
+	public static final List<String> DEFAULT_BLACKLIST = List.of("minecraft:obsidian", "minecraft:crying_obsidian");
 	static final int DEFAULT_COOLDOWN_TICKS = 20;
 	/** By default the damage types in this tag don't trigger swaps (see the tag file for the list). */
 	static final List<String> DEFAULT_IGNORED_DAMAGE_TYPES = List.of("#" + DamageBlockSwap.MOD_ID + ":ignored");
