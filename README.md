@@ -101,7 +101,8 @@ With them installed: **main menu / pause → Mods → Damage Block Swap → ⚙*
 ## Configuration
 
 Settings live in `config/damageblockswap.json` (created on first run; new keys are added
-automatically when you update the mod). Edit it directly or use the in-game screen.
+automatically when you update the mod). Edit it directly or use the in-game screen. The file is read at
+start; on a running server, `/dbs reload` reads it again.
 
 | Setting | Default | Meaning |
 |---|---|---|
@@ -113,15 +114,41 @@ automatically when you update the mod). Edit it directly or use the in-game scre
 | `enableGravityBlocks` | `true` | Allow sand, gravel and other falling blocks to be swapped. |
 | `cooldownTicks` | `20` | Minimum ticks between two swaps caused by the same player (20 = 1 second). 0 = no cooldown. A config from an older version that still has the old default `0` is raised to `20` once (logged); set `0` again if you want it. |
 | `ignoredDamageTypes` | `["#damageblockswap:ignored"]` | Damage types that do **not** cause a swap, as ids or `#tags`, e.g. `["minecraft:fall", "#minecraft:is_fire"]`. `[]` = every damage swaps. |
-| `chatMessages` | `true` | Announce each swap in chat, to every player, with the name of the player who got hurt. |
+| `chatMessages` | `true` | Announce each swap in chat, to every player, with the name of the player who got hurt. At most 20 rules are listed at once (e.g. after the journal could not be saved for a while); the rest is one "...and N more" line. |
 | `logging` | `true` | Log swaps to the console/log file. |
 | `blacklist` | `["minecraft:obsidian", "minecraft:crying_obsidian"]` | Blocks never picked for a new swap, as ids or `#tags`, e.g. `["diamond_ore", "#minecraft:logs", "#c:storage_blocks"]`. The `minecraft:` prefix is optional. Entries that match no block are reported in the log at server start. Comes on top of the `damageblockswap:never_swap` tag, which is fixed (bedrock, portals, barriers, ...), while this list is yours to edit: obsidian is there by default so a swap cannot destroy a Nether portal frame, remove it to allow that. |
 
 ## Commands
 
+For everyone:
+
 - `/damageblockswap list` (alias `/dbs list`) — every block type that has changed, `original → now`.
 - `/dbs lookup <block>` — what a block turned into, and what now looks like it. Example:
   `/dbs lookup stone` → *"Stone now looks like Lava — look for that to find it."*
+
+For operators (permission level 2, like `/setblock`; in single player with cheats on):
+
+- `/dbs status` — number of rules (and how many are saved), journal id and file format, whether new
+  rules are paused, cooldown and rules per hit, chunks waiting to be updated.
+- `/dbs pause` / `/dbs resume` — damage stops / starts adding rules. Rules already made keep being
+  applied to chunks, and `/dbs add` / `/dbs undo` still work. The pause is **not saved**: every server
+  start (every world in single player) begins unpaused.
+- `/dbs add <block> <block>` — add the rule `a ↔ b` by hand. It goes through the same path as a hit:
+  saved to the journal, applied around every player, announced in chat. Air, blocks with stored data
+  (chests, ...), two-block blocks (doors, beds, tall plants) and blocks in the `damageblockswap:never_swap`
+  tag are refused; `blacklist`, `enableLiquids` and `enableGravityBlocks` only steer random picks and
+  don't apply here.
+- `/dbs undo` — cancel the last rule by adding the same rule once more (a swap done twice is no swap).
+  Nothing is erased from the journal, so it is as safe as any other rule. Repeat to go back further:
+  each undo cancels the newest rule that is still in effect.
+- `/dbs reload` — re-read `config/damageblockswap.json` on the running server and rebuild the block
+  and damage type lists. If the file has an error, the current settings stay and the error is shown.
+
+There is no `/dbs reset`: see `docs/decisions.md`. To start over, stop the server and delete (or move)
+the journal file; old chunks then stay as they are (see "The swap journal file").
+
+Chat messages and command replies are translated (English, Russian) for players who have the mod;
+players with a vanilla client see them in English.
 
 ## Swap map key binding
 

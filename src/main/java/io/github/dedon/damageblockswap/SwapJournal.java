@@ -189,6 +189,37 @@ final class SwapJournal<T> {
 		return forward;
 	}
 
+	/**
+	 * Index of the rule {@code /dbs undo} cancels next, or -1 if the rules add up to nothing.
+	 *
+	 * <p>Every rule is a transposition, so adding a rule again right after itself cancels it (that is
+	 * all an undo does: the journal stays append-only). Two equal rules in a row (either order of
+	 * {@code a}/{@code b}) cancel each other; whatever is left after cancelling all such pairs, like
+	 * matching brackets, is what the world is made of, and its last rule is the one to undo. So
+	 * repeated undos walk back rule by rule (A, B, undo, undo leaves A B B A), and an undo is never
+	 * itself undone by the next one. Placeholders are no-ops and never undone.
+	 */
+	int undoTarget() {
+		int[] stack = new int[entries.size()];
+		int size = 0;
+		for (int i = 0; i < entries.size(); i++) {
+			Entry<T> e = entries.get(i);
+			if (e.isPlaceholder()) {
+				continue;
+			}
+			if (size > 0 && sameRule(entries.get(stack[size - 1]), e)) {
+				size--;
+			} else {
+				stack[size++] = i;
+			}
+		}
+		return size == 0 ? -1 : stack[size - 1];
+	}
+
+	private static <T> boolean sameRule(Entry<T> x, Entry<T> y) {
+		return (x.a().equals(y.a()) && x.b().equals(y.b())) || (x.a().equals(y.b()) && x.b().equals(y.a()));
+	}
+
 	T currentAppearanceOf(T original) {
 		return originalToCurrent.getOrDefault(original, original);
 	}

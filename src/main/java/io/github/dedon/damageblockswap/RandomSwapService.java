@@ -104,27 +104,35 @@ public final class RandomSwapService {
 		}
 	}
 
-	private boolean isAllowed(Block block) {
+	/**
+	 * Blocks no rule may ever pick, not even one an operator adds with {@code /dbs add}: the config
+	 * (blacklist, liquids, gravity blocks) only steers the random picks and is checked in {@link #isAllowed}.
+	 */
+	static boolean isUnsafe(Block block) {
 		BlockState state = block.defaultBlockState();
 
 		// Never swap the various flavors of air.
-		if (state.isAir()) return false;
+		if (state.isAir()) return true;
 
 		// Any block that stores data in a BlockEntity (chests, furnaces, signs, banners,
 		// shulker boxes, spawners, beehives, decorated pots, vaults, ...) implements
 		// EntityBlock. Skipping them protects inventories and NBT data.
-		if (block instanceof EntityBlock) return false;
+		if (block instanceof EntityBlock) return true;
+
+		// Doors, tall plants, beds: a swap places one block, never the other half.
+		if (SwapStates.isMultiBlock(state)) return true;
+
+		// The safe default set (bedrock, portals, barriers, fire, ...), see NEVER_SWAP.
+		return block.builtInRegistryHolder().is(NEVER_SWAP);
+	}
+
+	private boolean isAllowed(Block block) {
+		if (isUnsafe(block)) return false;
 
 		if (!Config.enableLiquids && block instanceof LiquidBlock) return false;
 		if (!Config.enableGravityBlocks && block instanceof FallingBlock) return false;
 
-		// Doors, tall plants, beds: a swap places one block, never the other half.
-		if (SwapStates.isMultiBlock(state)) return false;
-
-		// The safe default set (bedrock, portals, barriers, fire, ...), see NEVER_SWAP.
 		Holder<Block> holder = block.builtInRegistryHolder();
-		if (holder.is(NEVER_SWAP)) return false;
-
 		String id = BuiltInRegistries.BLOCK.getKey(block).toString();
 		if (blacklist.matches(id, tag -> holder.is(blacklistTags.get(tag)))) return false;
 

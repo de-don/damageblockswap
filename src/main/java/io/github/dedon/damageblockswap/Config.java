@@ -18,7 +18,7 @@ import java.util.List;
 /**
  * Simple JSON config, stored at {@code config/damageblockswap.json}.
  *
- * <p>Values are read once at startup. If the file is missing it is created with defaults;
+ * <p>Values are read at startup and again on {@code /dbs reload}. If the file is missing it is created with defaults;
  * if it exists but is missing newer keys, it is rewritten so those keys appear (with their
  * defaults). Keeping the fields {@code static} makes them easy to read from anywhere.
  */
@@ -144,6 +144,46 @@ public final class Config {
 			defaults.configVersion = CONFIG_VERSION;
 			apply(defaults);
 		}
+	}
+
+	/**
+	 * Re-reads the file for {@code /dbs reload}. Unlike {@link #load()} (which falls back to the
+	 * defaults), a file that can't be read leaves the current settings and the file untouched, so a
+	 * typo made while the server runs doesn't silently reset everything. Returns null on success, or
+	 * what was wrong with the file.
+	 */
+	public static String reload() {
+		return reloadFrom(path());
+	}
+
+	/** See {@link #reload()}. Package-private for tests. */
+	static String reloadFrom(Path path) {
+		Gson gson = gson();
+		Data data;
+		try {
+			if (Files.exists(path)) {
+				try (Reader reader = Files.newBufferedReader(path)) {
+					data = gson.fromJson(reader, Data.class);
+				}
+				if (data == null) {
+					return "the file is empty";
+				}
+			} else {
+				data = new Data();
+				data.configVersion = CONFIG_VERSION;
+			}
+		} catch (Exception e) {
+			LOGGER.warn("Config reload: could not read {}, keeping the current settings", path, e);
+			String message = e.getMessage();
+			return message != null ? message : e.toString();
+		}
+		apply(migrate(data));
+		try {
+			save(gson, path); // normalized, like at startup; creates the file if it was deleted
+		} catch (Exception e) {
+			LOGGER.warn("Failed to save config", e);
+		}
+		return null;
 	}
 
 	/**

@@ -249,4 +249,49 @@ class ConfigTest {
 
 		assertEquals(List.of("minecraft:obsidian", "minecraft:crying_obsidian"), Config.blacklist);
 	}
+
+	// --- /dbs reload ------------------------------------------------------------------------------
+
+	@Test
+	void reloadAppliesAnEditedFile(@TempDir Path dir) throws IOException {
+		Path file = dir.resolve("damageblockswap.json");
+		Config.loadFrom(file); // defaults, file created
+		int before = Config.generation;
+		Files.writeString(file, "{\"configVersion\": 2, \"cooldownTicks\": 5, \"blacklist\": [\"Dirt\"]}");
+
+		assertEquals(null, Config.reloadFrom(file));
+
+		assertEquals(5, Config.cooldownTicks);
+		assertEquals(List.of("minecraft:dirt"), Config.blacklist);
+		assertTrue(Config.generation > before, "caches built from the config are not rebuilt");
+		assertTrue(Files.readString(file).contains("minecraft:dirt"), "file not written back normalized");
+	}
+
+	@Test
+	void reloadOfABrokenFileKeepsTheCurrentSettingsAndTheFile(@TempDir Path dir) throws IOException {
+		Path file = dir.resolve("damageblockswap.json");
+		Files.writeString(file, "{\"configVersion\": 2, \"cooldownTicks\": 7}");
+		Config.loadFrom(file);
+		String broken = "{\"configVersion\": 2, \"cooldownTicks\": 9,,, oops";
+		Files.writeString(file, broken);
+		int before = Config.generation;
+
+		String error = Config.reloadFrom(file);
+
+		assertTrue(error != null && !error.isBlank(), "a broken file was reported as reloaded");
+		assertEquals(7, Config.cooldownTicks, "settings were changed by a broken file");
+		assertEquals(before, Config.generation);
+		assertEquals(broken, Files.readString(file), "the broken file was overwritten (the admin's edit is lost)");
+	}
+
+	@Test
+	void reloadOfAnEmptyFileIsAnError(@TempDir Path dir) throws IOException {
+		Path file = dir.resolve("damageblockswap.json");
+		Files.writeString(file, "{\"configVersion\": 2, \"cooldownTicks\": 7}");
+		Config.loadFrom(file);
+		Files.writeString(file, "");
+
+		assertTrue(Config.reloadFrom(file) != null);
+		assertEquals(7, Config.cooldownTicks);
+	}
 }

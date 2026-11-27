@@ -4,7 +4,20 @@
 
 **Back up your world before updating. Downgrading to 1.0.x is not supported.**
 
+### Added
+- Operator commands (permission level 2): `/dbs status`, `/dbs pause` / `/dbs resume` (damage stops
+  adding rules until resumed or the server restarts), `/dbs add <block> <block>` (a rule by hand,
+  refusing air, block-entity, two-block and `never_swap` blocks), `/dbs undo` (cancels the newest rule
+  by adding it once more; nothing is erased from the journal) and `/dbs reload` (re-reads the config on
+  a running server; a broken file keeps the current settings). `/dbs list` and `/dbs lookup` stay open
+  to everyone.
+- Chat messages and command replies are translatable (English, Russian), with an English fallback for
+  vanilla clients.
+
 ### Fixed
+- After the journal could not be saved for a long time, the rules are no longer announced one line
+  each once it saves again: at most 20 lines, then one "...and N more new rules" line. Hits waiting
+  for a save no longer pile up in memory without a limit.
 - Crashes and compatibility: Mod Menu works without Cloth Config, `/dbs lookup` accepts block
   ids correctly, locale-independent id handling, fake players ignored, per-dimension player chunk tracking.
 - Swap map screen no longer reads the journal while the server thread writes it.

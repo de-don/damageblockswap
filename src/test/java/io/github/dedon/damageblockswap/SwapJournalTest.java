@@ -197,4 +197,86 @@ class SwapJournalTest {
 		assertTrue(j.mapping(-5, 100).isEmpty());
 		assertTrue(j.mapping(2, 1).isEmpty());
 	}
+
+	// --- /dbs undo: append the rule once more --------------------------------------------------------
+
+	/** What /dbs undo does: appends the target rule again. Returns the undone index. */
+	private static int undo(SwapJournal<String> j) {
+		int target = j.undoTarget();
+		assertTrue(target >= 0, "nothing to undo");
+		SwapJournal.Entry<String> e = j.entries().get(target);
+		add(j, e.a(), e.b());
+		return target;
+	}
+
+	@Test
+	void nothingToUndoInAnEmptyOrCancelledJournal() {
+		SwapJournal<String> j = journal();
+		assertEquals(-1, j.undoTarget());
+		add(j, "a", "b");
+		add(j, "b", "a"); // the same transposition, other order
+		assertEquals(-1, j.undoTarget());
+		addPlaceholder(j, "x", "y");
+		assertEquals(-1, j.undoTarget(), "a placeholder is a no-op and can't be undone");
+	}
+
+	@Test
+	void repeatedUndosWalkBackRuleByRule() {
+		SwapJournal<String> j = journal();
+		add(j, "a", "b");
+		add(j, "c", "d");
+		add(j, "a", "c");
+		Map<String, String> afterTwo = Map.copyOf(j.mapping(0, 2));
+		Map<String, String> afterOne = Map.copyOf(j.mapping(0, 1));
+
+		assertEquals(2, undo(j));
+		assertEquals(afterTwo, j.mapping(0, j.version()));
+		assertEquals(1, undo(j), "the second undo must not undo the first undo");
+		assertEquals(afterOne, j.mapping(0, j.version()));
+		assertEquals(0, undo(j));
+		assertTrue(j.mapping(0, j.version()).isEmpty());
+		assertEquals(-1, j.undoTarget());
+		assertEquals(6, j.version(), "undo erased rules instead of appending");
+	}
+
+	@Test
+	void undoSkipsPlaceholdersAndCountsNewRulesAfterAnUndo() {
+		SwapJournal<String> j = journal();
+		add(j, "a", "b");
+		addPlaceholder(j, "gone", "b");
+		add(j, "c", "d");
+		assertEquals(2, undo(j));
+		assertEquals(0, j.undoTarget(), "the placeholder in between was not skipped");
+		add(j, "e", "f");
+		assertEquals(4, j.undoTarget(), "a rule added after an undo is the next to undo");
+	}
+
+	@Test
+	void undoRestoresTheWorldForRandomJournals() {
+		Random random = new Random(42);
+		for (int round = 0; round < 200; round++) {
+			SwapJournal<String> j = journal();
+			int rules = 1 + random.nextInt(12);
+			for (int i = 0; i < rules; i++) {
+				String a = UNIVERSE.get(random.nextInt(UNIVERSE.size()));
+				String b = UNIVERSE.get(random.nextInt(UNIVERSE.size()));
+				if (a.equals(b)) {
+					continue;
+				}
+				add(j, a, b);
+			}
+			// Undo until nothing is left: each step must give back a state the world had before.
+			int guard = 0;
+			while (j.undoTarget() >= 0) {
+				int target = j.undoTarget();
+				Map<String, String> expected = Map.copyOf(j.mapping(0, target));
+				undo(j);
+				// The state after the undo equals the state right before the undone rule was added,
+				// as long as every rule after it was cancelled already (true by construction).
+				assertEquals(expected, j.mapping(0, j.version()), "round " + round);
+				assertTrue(++guard <= 2 * rules + 1, "undo does not terminate");
+			}
+			assertTrue(j.mapping(0, j.version()).isEmpty(), "undoing everything must restore the original world");
+		}
+	}
 }

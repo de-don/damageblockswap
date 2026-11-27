@@ -1,0 +1,37 @@
+{
+	"key.damageblockswap.swapmap": "Открыть карту замен",
+
+	"damageblockswap.announce.hurt": "%s получает урон: %s ↔ %s",
+	"damageblockswap.announce.added": "%s добавляет правило: %s ↔ %s",
+	"damageblockswap.announce.undone": "%s отменяет правило %s ↔ %s",
+	"damageblockswap.announce.more": "...и ещё новых правил: %s (см. /dbs list)",
+
+	"damageblockswap.command.list.empty": "Пока ни один блок не заменён.",
+	"damageblockswap.command.list.header": "Заменённые типы блоков (%s):",
+	"damageblockswap.command.list.entry": "%s → %s  [%s → %s]",
+	"damageblockswap.command.lookup.unchanged": "%s не заменён — выглядит как раньше.",
+	"damageblockswap.command.lookup.looks_like": "%s теперь выглядит как %s — ищите его.",
+	"damageblockswap.command.lookup.was": "Блоки, которые теперь выглядят как %s, изначально были %s.",
+
+	"damageblockswap.command.status.rules": "Правил: %s (на диске: %s, заглушек для отсутствующих блоков: %s)",
+	"damageblockswap.command.status.journal": "Журнал: id %s, формат файла %s",
+	"damageblockswap.command.status.read_only": "Журнал замен не прочитан: мод выключен для этого мира (см. лог сервера).",
+	"damageblockswap.command.status.active": "Новые правила от урона: включены. Кулдаун %s тиков, правил за удар: %s.",
+	"damageblockswap.command.status.paused": "Новые правила от урона: НА ПАУЗЕ до /dbs resume или следующего запуска сервера.",
+	"damageblockswap.command.status.queue": "Чанков в очереди на обновление: %s",
+
+	"damageblockswap.command.pause.done": "Урон больше не добавляет правила замен (до /dbs resume или следующего запуска сервера).",
+	"damageblockswap.command.pause.already": "Уже на паузе.",
+	"damageblockswap.command.resume.done": "Урон снова добавляет правила замен.",
+	"damageblockswap.command.resume.already": "Пауза не включена.",
+
+	"damageblockswap.command.read_only": "Журнал замен для этого мира доступен только для чтения (см. лог сервера); правила добавлять нельзя.",
+	"damageblockswap.command.add.done": "Правило #%s записано: %s ↔ %s. Оно сохранится и применится в конце этого тика.",
+	"damageblockswap.command.add.same": "Выберите два разных блока.",
+	"damageblockswap.command.add.unsafe": "%s нельзя заменять: это воздух, блок с данными (block entity), двухблочный блок или блок из #damageblockswap:never_swap.",
+	"damageblockswap.command.undo.done": "Правило #%s (%s ↔ %s) отменено: оно добавлено ещё раз как правило #%s.",
+	"damageblockswap.command.undo.nothing": "Нет правила для отмены.",
+
+	"damageblockswap.command.reload.done": "Конфиг перечитан: для новых правил доступно блоков: %s.",
+	"damageblockswap.command.reload.failed": "Конфиг НЕ перечитан, в файле ошибка (текущие настройки сохранены): %s"
+}

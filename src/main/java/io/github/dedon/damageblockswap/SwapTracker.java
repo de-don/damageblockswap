@@ -156,6 +156,36 @@ public final class SwapTracker {
 		return store.journal().originalOf(current);
 	}
 
+	/** A rule of the journal, numbered from 1 as players see it. */
+	public record Rule(int number, Block a, Block b) {
+	}
+
+	/** The rule {@code /dbs undo} cancels next (see {@link SwapJournal#undoTarget()}), or null if none. */
+	public static Rule undoTarget() {
+		SwapJournal<Block> journal = store.journal();
+		int index = journal.undoTarget();
+		if (index < 0) {
+			return null;
+		}
+		SwapJournal.Entry<Block> entry = journal.entries().get(index);
+		return new Rule(index + 1, entry.a(), entry.b());
+	}
+
+	/** The journal's current id (for {@code /dbs status}). */
+	public static UUID journalId() {
+		return store.journal().id();
+	}
+
+	/** Rules that refer to blocks which don't exist (kept as no-ops). */
+	public static int placeholderCount() {
+		return store.journal().placeholderCount();
+	}
+
+	/** The journal file format this version writes. */
+	public static int fileFormat() {
+		return JournalFile.FORMAT;
+	}
+
 	public static Map<Block, Block> allChanges() {
 		Map<Block, Block> changes = new LinkedHashMap<>();
 		store.journal().changes().entrySet().stream()
