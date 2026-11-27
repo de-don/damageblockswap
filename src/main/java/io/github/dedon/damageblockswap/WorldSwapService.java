@@ -121,11 +121,6 @@ public final class WorldSwapService {
 		ServerPlayConnectionEvents.DISCONNECT.register((handler, server) -> lastPlayerChunk.remove(handler.player.getUUID()));
 	}
 
-	/** Refreshes the area around the player right after a hit, so the swap shows immediately. */
-	public void onHit(ServerLevel level, int centerChunkX, int centerChunkZ) {
-		refreshAround(level, centerChunkX, centerChunkZ, Config.swapRadius);
-	}
-
 	/**
 	 * When a player moves into a new chunk, re-check the chunks around them (within the configured
 	 * radius) and update any that are behind. This spreads the work naturally over movement, and the
@@ -257,8 +252,13 @@ public final class WorldSwapService {
 	}
 
 	/**
-	 * Re-checks the area around every player on the next tick (used once rules that could not be
-	 * saved earlier finally are, since only saved rules are applied to chunks).
+	 * Re-checks the area around every player at this service's next end-of-tick step: in the same
+	 * tick when called from an earlier END_SERVER_TICK listener (DamageBlockSwap.saveNewRules), else
+	 * the next tick. Used whenever newly saved rules exist: a rule applies to the whole world, so every
+	 * player's bubble must catch up, not just the hit player's. It only forgets the players' last
+	 * chunks; the chunks found behind join the de-duplicated queue and are worked off within the
+	 * per-tick budget, and a chunk mid-pass keeps its job and saved progress. Calling it several times
+	 * in one tick costs the same as once.
 	 */
 	public void refreshAroundAllPlayers() {
 		lastPlayerChunk.clear();

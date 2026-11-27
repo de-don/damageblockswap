@@ -35,6 +35,29 @@ water). Blocks that store data — chests, furnaces, signs,
 shulker boxes, spawners, and anything else with a block entity — are never swapped, so your
 inventories and builds are safe.
 
+A swapped block keeps the properties it shares with the block it replaces: logs keep their axis,
+stairs and slabs their shape and facing, waterlogged blocks their water. Leaves are always placed
+as "player-placed" leaves, so stone that turned into leaves doesn't decay.
+
+### What can be swapped and what triggers a swap
+
+New rules never pick blocks in the block tag **`damageblockswap:never_swap`**: bedrock, reinforced
+deepslate, end portal frames, portals, barriers, light blocks, structure voids, fire, command /
+structure / jigsaw / test blocks, piston heads, bubble columns, frosted ice, farmland, infested
+blocks, and every two-block block (doors, beds, tall grass and flowers, tall seagrass, small
+dripleaf, pitcher plants — the mod would place only one half). A datapack can change the tag
+(`data/damageblockswap/tags/block/never_swap.json`); two-block blocks stay excluded regardless.
+The `blacklist` setting adds more blocks or tags on top.
+
+Not every kind of damage makes a swap: by default drowning, starving, suffocating in a wall,
+entity cramming, burning (after leaving the fire), freezing, the void, the world border and
+`/kill` don't (damage type tag `damageblockswap:ignored`, see `ignoredDamageTypes`). These hurt
+every few ticks for as long as the situation lasts, and a swap can cause that situation.
+
+The blacklist, the tag and the damage settings only affect **new** rules. Rules that already
+happened keep being applied everywhere exactly as before — otherwise chunks updated before and
+after the change would disagree.
+
 Newly placed or physics-generated blocks (a block you place, cobblestone from lava + water, etc.)
 are **not** retroactively swapped — only future rules that target their type will affect them.
 
@@ -88,10 +111,11 @@ automatically when you update the mod). Edit it directly or use the in-game scre
 | `updateNeighbors` | `false` | Full vanilla block updates after swaps: neighbouring blocks react (redstone, connections, unsupported blocks break and drop). **Can cause severe lag** with many/common blocks — leave off unless you want it. Note that even when off, a swapped-in falling block (sand, gravel) still falls and swapped-in water/lava still flows — that is the block itself, not its neighbours. |
 | `enableLiquids` | `true` | Allow water and lava to be swapped. |
 | `enableGravityBlocks` | `true` | Allow sand, gravel and other falling blocks to be swapped. |
-| `cooldownTicks` | `0` | Minimum ticks between swaps (20 = 1 second). 0 = no cooldown. |
-| `chatMessages` | `true` | Announce each swap in chat. |
+| `cooldownTicks` | `20` | Minimum ticks between two swaps caused by the same player (20 = 1 second). 0 = no cooldown. A config from an older version that still has the old default `0` is raised to `20` once (logged); set `0` again if you want it. |
+| `ignoredDamageTypes` | `["#damageblockswap:ignored"]` | Damage types that do **not** cause a swap, as ids or `#tags`, e.g. `["minecraft:fall", "#minecraft:is_fire"]`. `[]` = every damage swaps. |
+| `chatMessages` | `true` | Announce each swap in chat, to every player, with the name of the player who got hurt. |
 | `logging` | `true` | Log swaps to the console/log file. |
-| `blacklist` | `[]` | Block IDs never swapped, e.g. `["minecraft:bedrock", "diamond_ore"]`. The `minecraft:` prefix is optional. |
+| `blacklist` | `["minecraft:obsidian", "minecraft:crying_obsidian"]` | Blocks never picked for a new swap, as ids or `#tags`, e.g. `["diamond_ore", "#minecraft:logs", "#c:storage_blocks"]`. The `minecraft:` prefix is optional. Entries that match no block are reported in the log at server start. Comes on top of the `damageblockswap:never_swap` tag, which is fixed (bedrock, portals, barriers, ...), while this list is yours to edit: obsidian is there by default so a swap cannot destroy a Nether portal frame, remove it to allow that. |
 
 ## Commands
 
@@ -104,6 +128,8 @@ automatically when you update the mod). Edit it directly or use the in-game scre
 **Options → Controls → Miscellaneous → "Open Swap Map"** (unbound by default — assign a key).
 Pressing it opens a scrollable list of every swap so far. Requires Cloth Config; otherwise use
 `/dbs list`.
+The map (and the Mod Menu "Swap Map" tab) only works in single-player and for the player hosting a
+LAN world; on a dedicated server or as a LAN guest it says so — use `/dbs list` there.
 
 ## Building
 
