@@ -8,6 +8,7 @@
 		"fabric-gametest": [
 			"io.github.dedon.damageblockswap.AdminCommandsGameTest",
 			"io.github.dedon.damageblockswap.ChunkResumeGameTest",
+			"io.github.dedon.damageblockswap.DamageTypeTogglesGameTest",
 			"io.github.dedon.damageblockswap.SafeRulesGameTest",
 			"io.github.dedon.damageblockswap.SwapMapSyncGameTest"
 		]

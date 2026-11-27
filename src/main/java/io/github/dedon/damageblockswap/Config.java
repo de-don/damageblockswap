@@ -36,7 +36,7 @@ public final class Config {
 	public static final List<String> DEFAULT_BLACKLIST = List.of("minecraft:obsidian", "minecraft:crying_obsidian");
 	static final int DEFAULT_COOLDOWN_TICKS = 20;
 	/** By default the damage types in this tag don't trigger swaps (see the tag file for the list). */
-	static final List<String> DEFAULT_IGNORED_DAMAGE_TYPES = List.of("#" + DamageBlockSwap.MOD_ID + ":ignored");
+	public static final List<String> DEFAULT_IGNORED_DAMAGE_TYPES =List.of("#" + DamageBlockSwap.MOD_ID + ":ignored");
 
 	/** How many separate random swaps happen per hit. Clamped to {@value #MIN_SWAPS}..{@value #MAX_SWAPS}. */
 	public static int swapsPerHit = 1;

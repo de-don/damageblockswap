@@ -1,16 +1,26 @@
 package io.github.dedon.damageblockswap.client;
 
 import io.github.dedon.damageblockswap.Config;
+import io.github.dedon.damageblockswap.DamageTypeCatalog;
+import io.github.dedon.damageblockswap.DamageTypeToggles;
 
+import me.shedaniel.clothconfig2.api.AbstractConfigListEntry;
 import me.shedaniel.clothconfig2.api.ConfigBuilder;
 import me.shedaniel.clothconfig2.api.ConfigCategory;
 import me.shedaniel.clothconfig2.api.ConfigEntryBuilder;
+import me.shedaniel.clothconfig2.impl.builders.SubCategoryBuilder;
 
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.multiplayer.ClientPacketListener;
 import net.minecraft.network.chat.Component;
 
+import org.jspecify.annotations.Nullable;
+
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * The Cloth Config settings screen opened from Mod Menu's "Config" button.
@@ -27,9 +37,8 @@ final class ClothConfigScreen {
 	static Screen create(Screen parent) {
 		ConfigBuilder builder = ConfigBuilder.create()
 				.setParentScreen(parent)
-				.setTitle(Component.literal("Damage Block Swap"))
-				// When the player clicks "Save", persist the values to disk.
-				.setSavingRunnable(Config::save);
+				.setTitle(Component.literal("Damage Block Swap"));
+		// The saving runnable (persist to disk on "Save") is set below, with the damage type checkboxes.
 
 		ConfigEntryBuilder entry = builder.entryBuilder();
 		ConfigCategory general = builder.getOrCreateCategory(Component.literal("General"));
@@ -108,15 +117,75 @@ final class ClothConfigScreen {
 
 		general.addEntry(entry.startStrList(
 						Component.literal("Damage types that don't swap"), new ArrayList<>(Config.ignoredDamageTypes))
-				.setDefaultValue(new ArrayList<>(List.of("#damageblockswap:ignored")))
-				.setTooltip(Component.literal("Damage types that do NOT cause a swap: ids or #tags, e.g. minecraft:fall or #minecraft:is_fire. The default tag #damageblockswap:ignored holds drowning, starving, suffocation, cramming, burning, freezing, the void, the world border and /kill. Empty = every damage causes swaps."))
+				.setDefaultValue(new ArrayList<>(Config.DEFAULT_IGNORED_DAMAGE_TYPES))
+				.setTooltip(Component.literal("Damage types that do NOT cause a swap: ids or #tags, e.g. minecraft:fall or #minecraft:is_fire. The default " + String.join(", ", Config.DEFAULT_IGNORED_DAMAGE_TYPES) + " holds drowning, starving, suffocation, cramming, burning, freezing, the void, the world border and /kill. Empty = every damage causes swaps. The checkboxes below edit this list."))
 				.setSaveConsumer(Config::setIgnoredDamageTypes)
 				.build());
+
+		// The checkboxes are saved after the list above (Cloth saves the entries in order, then runs
+		// the saving runnable), so they are applied on top of whatever was typed into the list.
+		Map<String, Boolean> switched = new HashMap<>();
+		DamageTypeToggles toggles = liveDamageTypes();
+		general.addEntry(damageTypeSection(entry, toggles, switched));
+		builder.setSavingRunnable(() -> {
+			if (toggles != null && !switched.isEmpty()) {
+				Config.setIgnoredDamageTypes(toggles.apply(Config.ignoredDamageTypes, switched));
+			}
+			Config.save();
+		});
 
 		// Second tab: a read-only view of what has turned into what so far.
 		ConfigCategory swapMap = builder.getOrCreateCategory(Component.literal("Swap Map"));
 		SwapMapScreen.addSwapEntries(swapMap, entry);
 
 		return builder.build();
+	}
+
+	/**
+	 * Damage types and tags of the world the player is in (the client's synced copy of the server's
+	 * registry: datapack and mod types included), or null on the title screen, where no world and so
+	 * no live registry exists.
+	 */
+	private static @Nullable DamageTypeToggles liveDamageTypes() {
+		ClientPacketListener connection = Minecraft.getInstance().getConnection();
+		return connection != null ? DamageTypeCatalog.toggles(connection.registryAccess()) : null;
+	}
+
+	/**
+	 * Collapsible "causes swaps" checkbox per damage type. A switched checkbox is recorded in
+	 * {@code switched} (type id -> wanted value) and applied to the list by the saving runnable.
+	 */
+	private static AbstractConfigListEntry<?> damageTypeSection(ConfigEntryBuilder entry, @Nullable DamageTypeToggles toggles,
+			Map<String, Boolean> switched) {
+		SubCategoryBuilder section = entry.startSubCategory(Component.literal("Damage types that cause swaps"))
+				.setExpanded(false)
+				.setTooltip(Component.literal("One switch per damage type of this world. \"Swaps\" = getting hurt this way adds a rule. Switching edits the list above: off adds the type, on removes it (a #tag holding it is replaced by its other types)."));
+		if (toggles == null) {
+			section.add(entry.startTextDescription(Component.literal(
+					"Open the settings from the pause menu in a world to switch damage types one by one. The list above works everywhere.")).build());
+			return section.build();
+		}
+		List<String> current = Config.ignoredDamageTypes;
+		for (String id : toggles.typeIds()) {
+			boolean shown = toggles.causesSwaps(current, id);
+			section.add(entry.startBooleanToggle(Component.literal(label(id)), shown)
+					.setDefaultValue(toggles.causesSwaps(Config.DEFAULT_IGNORED_DAMAGE_TYPES, id))
+					.setYesNoTextSupplier(swaps -> Component.literal(swaps ? "Swaps" : "No swap"))
+					.setTooltip(Component.literal(id))
+					.setSaveConsumer(value -> {
+						if (value == shown) {
+							switched.remove(id);
+						} else {
+							switched.put(id, value);
+						}
+					})
+					.build());
+		}
+		return section.build();
+	}
+
+	/** {@code minecraft:drown} -> {@code drown}; other namespaces keep the full id. */
+	private static String label(String id) {
+		return id.startsWith("minecraft:") ? id.substring("minecraft:".length()) : id;
 	}
 }

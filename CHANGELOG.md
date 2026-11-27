@@ -18,6 +18,11 @@
   sends the saved map when a player joins and after every new rule (a small packet of block ids).
   Players without the mod get nothing and are not affected; on a server without the mod the screen
   says so and points to `/dbs list`.
+- Settings screen: a collapsible "Damage types that cause swaps" section with a switch per damage
+  type of the current world (datapack and mod types too). It edits the `ignoredDamageTypes` list,
+  which stays what is saved; the config file format is unchanged and the `#damageblockswap:ignored`
+  tag keeps working until one of its own types is switched on.
+- README: the mod runs on the server and vanilla clients can join; the swap map needs the mod on the client.
 
 ### Fixed
 - After the journal could not be saved for a long time, the rules are no longer announced one line
@@ -56,6 +61,8 @@
 - New `ignoredDamageTypes` setting: drowning, starving, suffocation, cramming, burning, freezing,
   the void, the world border and `/kill` no longer cause swaps by default (tag `damageblockswap:ignored`).
 - A hit that adds no rule no longer starts the cooldown.
+- Build: Loom pinned to a release (1.17.21), Mod Menu and Cloth Config are compile-only for the
+  client code (and dev runs), CI caches Gradle.
 
 ### Known issues
 - Damage from lava, magma or cactus still causes swaps, so a rule that surrounds you with them can

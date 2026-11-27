@@ -62,10 +62,16 @@ dependencies {
 
 	// Optional in-game config UI. NOT required for the mod to work: without these the mod
 	// still runs, just without the settings screen (they are only marked "recommends").
-	// The screen code lives in the client source set; Mod Menu itself is a client-only mod.
-	implementation "com.terraformersmc:modmenu:${project.modmenu_version}"
-	implementation("me.shedaniel.cloth:cloth-config-fabric:${project.cloth_config_version}") {
+	// Only the client source set compiles against them (clientCompileOnly), so the main code can't
+	// use them by accident; localRuntime puts them into the dev runs only (they are never exposed to
+	// anyone depending on this mod).
+	clientCompileOnly "com.terraformersmc:modmenu:${project.modmenu_version}"
+	clientCompileOnly("me.shedaniel.cloth:cloth-config-fabric:${project.cloth_config_version}") {
 		// Cloth bundles its own Fabric API build; we already provide one above.
+		exclude(group: "net.fabricmc.fabric-api")
+	}
+	localRuntime "com.terraformersmc:modmenu:${project.modmenu_version}"
+	localRuntime("me.shedaniel.cloth:cloth-config-fabric:${project.cloth_config_version}") {
 		exclude(group: "net.fabricmc.fabric-api")
 	}
 

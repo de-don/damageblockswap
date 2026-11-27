@@ -5,13 +5,13 @@ Tag `v1.1.0` is set only after plan item 5 is done (see below). Source: the fina
 
 ## Before the 1.1.0 tag
 
-- [ ] **Item 5 of the hardening plan** (the release waits for it): ~~admin commands
+- [x] (5a-5c) **Item 5 of the hardening plan** (the release waits for it): ~~admin commands
       (`/dbs undo|pause|resume|add|reload|status`, permission level 2+)~~ done in 5a, `reset` deferred
       (docs/decisions.md); ~~S2C packet that syncs
       the swap map to clients (client stays optional, check `canSend`)~~ done in 5b, ~~server messages through
-      `translatableWithFallback` + `ru_ru.json`~~ (5a), pin the Loom version (not SNAPSHOT), Mod Menu/Cloth via
-      `clientCompileOnly` + `localRuntime`, `gradle/actions/setup-gradle` in CI.
-- [ ] **Settings UI for ignored damage types.** Today `ignoredDamageTypes` is a plain list of ids/#tags
+      `translatableWithFallback` + `ru_ru.json`~~ (5a), ~~pin the Loom version (not SNAPSHOT), Mod Menu/Cloth via
+      `clientCompileOnly` + `localRuntime`, `gradle/actions/setup-gradle` in CI~~ (5c).
+- [x] (5c) **Settings UI for ignored damage types.** Today `ignoredDamageTypes` is a plain list of ids/#tags
       (default `#damageblockswap:ignored`: drowning, starving, suffocation, cramming, burning, freezing,
       the void, the world border, `/kill`). Make it easy to configure in the mod's settings screen: a
       collapsible section with one checkbox per damage type ("causes swaps" on/off), so players who want
@@ -31,7 +31,9 @@ Tag `v1.1.0` is set only after plan item 5 is done (see below). Source: the fina
       without Cloth and Mod Menu; LAN with a guest (both players see rules and the chat message);
       vanilla client joining a modded server. Item 5a adds: `/dbs` admin commands by an op and a
       non-op on a dedicated server; chat messages in Russian with the mod and in English on a vanilla
-      client; `/dbs reload` after editing the config of a running server. Item 5b adds: swap map
+      client; `/dbs reload` after editing the config of a running server. Item 5c adds: the "Damage types that cause swaps" switches (open from the pause menu,
+      switch drowning on, save, drown: a rule appears; the config file has the tag replaced), `runClient`
+      shows Mod Menu and Cloth. Item 5b adds: swap map
       screen of a modded client on a dedicated server and as a LAN guest (shows the server's rules,
       updated after a hit when reopened, nothing stale after switching servers); a vanilla client
       is not kicked.
@@ -54,9 +56,9 @@ From the Opus review, minor findings:
 - [ ] Duplicate console line when `logging=true` (`DamageBlockSwap.java:223-230`).
 - [ ] A config with `configVersion > 2` (after a downgrade from a future version) is rewritten as 2 and
       migrated again (`Config.java:225`).
-- [ ] `ClothConfigScreen.java:111` hardcodes `"#damageblockswap:ignored"`; take it from
+- [x] (5c) `ClothConfigScreen.java:111` hardcodes `"#damageblockswap:ignored"`; take it from
       `Config.DEFAULT_IGNORED_DAMAGE_TYPES`.
-- [ ] README: say that the mod is server-side only and works with vanilla clients (verify live first).
+- [x] (5c) README: say that the mod is server-side only and works with vanilla clients (verify live first).
 - [ ] No global limit on the number of rules (10 players in combat can add ~10 rules per second).
 - [ ] Settings made in the client UI do not affect a remote server; the screen does not say so.
 - [x] (5a) Dedicated server reads the config only at start; `/reload` does not (`/dbs reload` is item 5).

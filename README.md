@@ -87,6 +87,15 @@ which journal it was swapped by, so it is never swapped twice or by the wrong ru
 - **Fabric API**
 - **Java 25**
 
+## Server and clients
+
+The mod does its work on the server (in single player, on the built-in server). On a dedicated
+server only the server needs it: players with a **vanilla client** can join and play, see the swapped
+blocks and the chat messages (in English), and use `/dbs list` and `/dbs lookup`. Installing the mod
+on the client too adds the swap map screen (and the Mod Menu "Swap Map" tab) with the server's rules,
+and chat messages in the client's language. A client with the mod can also join a server without it;
+there the swap map says it has no map.
+
 ## Optional (for the in-game settings screen)
 
 These are *recommended*, not required — the mod runs fine without them (configured via the JSON
@@ -97,6 +106,16 @@ file). Install both to get an in-game settings screen and swap-map viewer:
 
 With them installed: **main menu / pause → Mods → Damage Block Swap → ⚙**. The screen has a
 **General** tab (all settings) and a read-only **Swap Map** tab.
+
+At the bottom of **General**, the collapsible **Damage types that cause swaps** section has one
+switch per damage type of the world you are in (including types added by datapacks and mods):
+*Swaps* or *No swap*. It edits the `ignoredDamageTypes` list above it, which stays what is saved:
+switching a type off adds its id; switching it on removes it, and a `#tag` holding it (like the
+default `#damageblockswap:ignored`) is replaced by the tag's other types — from then on later changes
+to that tag by a datapack no longer apply to your list. Without touching the switches the list,
+and the tag in it, is kept as it is. The switches need a world (open the settings from the pause
+menu); on the title screen only the list is shown. These are the settings of your own game: on a
+dedicated server, the server's config file counts.
 
 ## Configuration
 
@@ -113,7 +132,7 @@ start; on a running server, `/dbs reload` reads it again.
 | `enableLiquids` | `true` | Allow water and lava to be swapped. |
 | `enableGravityBlocks` | `true` | Allow sand, gravel and other falling blocks to be swapped. |
 | `cooldownTicks` | `20` | Minimum ticks between two swaps caused by the same player (20 = 1 second). 0 = no cooldown. A config from an older version that still has the old default `0` is raised to `20` once (logged); set `0` again if you want it. |
-| `ignoredDamageTypes` | `["#damageblockswap:ignored"]` | Damage types that do **not** cause a swap, as ids or `#tags`, e.g. `["minecraft:fall", "#minecraft:is_fire"]`. `[]` = every damage swaps. |
+| `ignoredDamageTypes` | `["#damageblockswap:ignored"]` | Damage types that do **not** cause a swap, as ids or `#tags`, e.g. `["minecraft:fall", "#minecraft:is_fire"]`. `[]` = every damage swaps. The settings screen also has a switch per damage type that edits this list. |
 | `chatMessages` | `true` | Announce each swap in chat, to every player, with the name of the player who got hurt. At most 20 rules are listed at once (e.g. after the journal could not be saved for a while); the rest is one "...and N more" line. |
 | `logging` | `true` | Log swaps to the console/log file. |
 | `blacklist` | `["minecraft:obsidian", "minecraft:crying_obsidian"]` | Blocks never picked for a new swap, as ids or `#tags`, e.g. `["diamond_ore", "#minecraft:logs", "#c:storage_blocks"]`. The `minecraft:` prefix is optional. Entries that match no block are reported in the log at server start. Comes on top of the `damageblockswap:never_swap` tag, which is fixed (bedrock, portals, barriers, ...), while this list is yours to edit: obsidian is there by default so a swap cannot destroy a Nether portal frame, remove it to allow that. |
