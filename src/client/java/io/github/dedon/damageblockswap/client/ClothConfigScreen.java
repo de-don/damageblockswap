@@ -10,6 +10,7 @@ import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 
 import java.util.ArrayList;
+import java.util.List;
 
 /**
  * The Cloth Config settings screen opened from Mod Menu's "Config" button.
@@ -92,17 +93,24 @@ final class ClothConfigScreen {
 
 		general.addEntry(entry.startIntField(
 						Component.literal("Cooldown (ticks)"), Config.cooldownTicks)
-				.setDefaultValue(0)
+				.setDefaultValue(20)
 				.setMin(0)
-				.setTooltip(Component.literal("Minimum ticks between swaps (20 ticks = 1 second). 0 = no cooldown."))
+				.setTooltip(Component.literal("Minimum ticks between two swaps caused by the same player (20 ticks = 1 second). 0 = no cooldown."))
 				.setSaveConsumer(value -> Config.cooldownTicks = value)
 				.build());
 
 		general.addEntry(entry.startStrList(
 						Component.literal("Blacklisted blocks"), new ArrayList<>(Config.blacklist))
 				.setDefaultValue(new ArrayList<>())
-				.setTooltip(Component.literal("Block IDs that are never swapped, e.g. minecraft:bedrock. The \"minecraft:\" prefix is optional."))
+				.setTooltip(Component.literal("Blocks never picked for a new swap: ids or #tags, e.g. minecraft:diamond_ore or #minecraft:logs. The \"minecraft:\" prefix is optional. Swaps that already happened are not affected. Bedrock, portals, barriers, fire, doors, tall plants and similar are always excluded (block tag damageblockswap:never_swap)."))
 				.setSaveConsumer(value -> Config.blacklist = value)
+				.build());
+
+		general.addEntry(entry.startStrList(
+						Component.literal("Damage types that don't swap"), new ArrayList<>(Config.ignoredDamageTypes))
+				.setDefaultValue(new ArrayList<>(List.of("#damageblockswap:ignored")))
+				.setTooltip(Component.literal("Damage types that do NOT cause a swap: ids or #tags, e.g. minecraft:fall or #minecraft:is_fire. The default tag #damageblockswap:ignored holds drowning, starving, suffocation, cramming, burning, freezing, the void, the world border and /kill. Empty = every damage causes swaps."))
+				.setSaveConsumer(value -> Config.ignoredDamageTypes = value)
 				.build());
 
 		// Second tab: a read-only view of what has turned into what so far.

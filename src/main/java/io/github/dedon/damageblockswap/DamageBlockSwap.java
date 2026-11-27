@@ -6,6 +6,7 @@ import net.fabricmc.fabric.api.attachment.v1.AttachmentType;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.fabricmc.fabric.api.entity.FakePlayer;
 import net.fabricmc.fabric.api.entity.event.v1.ServerLivingEntityEvents;
+import net.fabricmc.fabric.api.event.lifecycle.v1.CommonLifecycleEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
@@ -73,7 +74,13 @@ public class DamageBlockSwap implements ModInitializer {
 	// The same service, for the gametests (src/gametest, same package), which drive the live pump.
 	private static WorldSwapService activeWorldSwapService;
 
-	// Per-player server-tick of the last swap, for the optional cooldown.
+	// Which damage types don't cause swaps (config, by default the #damageblockswap:ignored tag).
+	private final DamageTypeFilter damageTypeFilter = new DamageTypeFilter();
+	// Bumped whenever the server (re)loads its tags (world start, /reload): the never_swap tag and tags
+	// named in the config may have changed, so the lists built from them are rebuilt.
+	private static volatile int tagsGeneration = 0;
+
+	// Per-player server-tick of the last swap, for the cooldown.
 	private final Map<UUID, Integer> lastSwapTick = new HashMap<>();
 
 	/** A hit that added rules this tick; shown (chat + area refresh) once the rules are on disk. */
@@ -115,6 +122,17 @@ public class DamageBlockSwap implements ModInitializer {
 			resetSessionState(); // in case a previous server didn't shut down cleanly
 			SwapTracker.load(server);
 		});
+		// Once the world's tags are bound, build the swappable list and check the config lists, so typos
+		// in the blacklist / ignored damage types are reported at startup and not on the first hit.
+		ServerLifecycleEvents.SERVER_STARTED.register(server -> {
+			randomSwapService.initialize();
+			damageTypeFilter.refresh(server.registryAccess());
+		});
+		CommonLifecycleEvents.TAGS_LOADED.register((registries, client) -> {
+			if (!client) {
+				tagsGeneration++; // rebuilt lazily, on the server thread, the next time they are used
+			}
+		});
 		ServerLifecycleEvents.SERVER_STOPPING.register(server -> {
 			SwapTracker.flush();
 			resetSessionState(); // don't let unfinished work leak into the next world
@@ -137,6 +155,11 @@ public class DamageBlockSwap implements ModInitializer {
 				SwapCommand.register(dispatcher, registry));
 
 		LOGGER.info("Damage Block Swap initialized.");
+	}
+
+	/** Changes every time the server (re)loads tags; caches built from tags compare against it. */
+	static int tagsGeneration() {
+		return tagsGeneration;
 	}
 
 	/** The running chunk pump. Package-private, for the gametests only. */
@@ -212,7 +235,11 @@ public class DamageBlockSwap implements ModInitializer {
 
 		MinecraftServer server = serverLevel.getServer();
 
-		// Optional per-player cooldown so rapid damage (fire, drowning) doesn't spam swaps.
+		// Damage that repeats for as long as a situation lasts (drowning, suffocating, ...) doesn't
+		// count; checked before the cooldown so it doesn't use it up.
+		if (damageTypeFilter.ignores(source, serverLevel.registryAccess())) return;
+
+		// Per-player cooldown so rapid damage (fire, cactus, a mob's hits) doesn't spam swaps.
 		if (Config.cooldownTicks > 0) {
 			int now = server.getTickCount();
 			Integer last = lastSwapTick.get(player.getUUID());

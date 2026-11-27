@@ -1,14 +1,22 @@
 package io.github.dedon.damageblockswap;
 
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
+
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ConfigTest {
@@ -45,5 +53,120 @@ class ConfigTest {
 	@Test
 	void nullBlacklistBecomesEmpty() {
 		assertTrue(Config.normalizeBlacklist(null).isEmpty());
+	}
+
+	@Test
+	void blacklistAcceptsTags() {
+		assertEquals(List.of("#minecraft:logs", "minecraft:stone"),
+				Config.normalizeBlacklist(List.of("#Logs", "stone")));
+	}
+
+	// --- File migration (version 1 = mod 1.0.x / 1.1.0, which wrote every key, cooldown 0 included) ---
+
+	private static final String OLD_FILE_WITH_DEFAULTS = """
+			{
+			  "_help": "Damage Block Swap config.",
+			  "swapsPerHit": 2,
+			  "blacklist": ["minecraft:diamond_ore"],
+			  "chatMessages": false,
+			  "logging": true,
+			  "enableLiquids": false,
+			  "enableGravityBlocks": true,
+			  "cooldownTicks": 0,
+			  "updateNeighbors": false,
+			  "pickFromNearbyChunks": true,
+			  "swapRadius": 5
+			}
+			""";
+
+	@Test
+	void oldFileWithTheOldDefaultCooldownGetsTheNewDefault(@TempDir Path dir) throws IOException {
+		Path file = dir.resolve("damageblockswap.json");
+		Files.writeString(file, OLD_FILE_WITH_DEFAULTS);
+
+		Config.loadFrom(file);
+
+		assertEquals(Config.DEFAULT_COOLDOWN_TICKS, Config.cooldownTicks);
+		// Everything else the old file said is kept.
+		assertEquals(2, Config.swapsPerHit);
+		assertEquals(List.of("minecraft:diamond_ore"), Config.blacklist);
+		assertFalse(Config.chatMessages);
+		assertFalse(Config.enableLiquids);
+		assertEquals(5, Config.swapRadius);
+		// New key: the default.
+		assertEquals(List.of("#damageblockswap:ignored"), Config.ignoredDamageTypes);
+
+		JsonObject written = JsonParser.parseString(Files.readString(file)).getAsJsonObject();
+		assertEquals(Config.CONFIG_VERSION, written.get("configVersion").getAsInt());
+		assertEquals(Config.DEFAULT_COOLDOWN_TICKS, written.get("cooldownTicks").getAsInt());
+		assertTrue(written.has("ignoredDamageTypes"));
+	}
+
+	@Test
+	void oldFileWithAChosenCooldownKeepsIt(@TempDir Path dir) throws IOException {
+		Path file = dir.resolve("damageblockswap.json");
+		Files.writeString(file, OLD_FILE_WITH_DEFAULTS.replace("\"cooldownTicks\": 0", "\"cooldownTicks\": 7"));
+
+		Config.loadFrom(file);
+
+		assertEquals(7, Config.cooldownTicks);
+	}
+
+	@Test
+	void zeroCooldownChosenAfterTheMigrationSticks(@TempDir Path dir) throws IOException {
+		Path file = dir.resolve("damageblockswap.json");
+		Files.writeString(file, OLD_FILE_WITH_DEFAULTS);
+		Config.loadFrom(file); // migrates, writes version 2
+
+		String edited = Files.readString(file).replaceAll("\"cooldownTicks\": \\d+", "\"cooldownTicks\": 0");
+		Files.writeString(file, edited);
+		Config.loadFrom(file);
+		assertEquals(0, Config.cooldownTicks);
+		Config.loadFrom(file);
+		assertEquals(0, Config.cooldownTicks);
+	}
+
+	@Test
+	void freshInstallUsesTheNewDefaults(@TempDir Path dir) throws IOException {
+		Path file = dir.resolve("sub").resolve("damageblockswap.json");
+
+		Config.loadFrom(file);
+
+		assertEquals(Config.DEFAULT_COOLDOWN_TICKS, Config.cooldownTicks);
+		assertEquals(List.of("#damageblockswap:ignored"), Config.ignoredDamageTypes);
+		assertTrue(Config.blacklist.isEmpty());
+		JsonObject written = JsonParser.parseString(Files.readString(file)).getAsJsonObject();
+		assertEquals(Config.CONFIG_VERSION, written.get("configVersion").getAsInt());
+	}
+
+	@Test
+	void emptyIgnoredDamageTypesMeansEveryDamageCounts(@TempDir Path dir) throws IOException {
+		Path file = dir.resolve("damageblockswap.json");
+		Files.writeString(file, "{\"configVersion\": 2, \"ignoredDamageTypes\": []}");
+
+		Config.loadFrom(file);
+
+		assertTrue(Config.ignoredDamageTypes.isEmpty());
+	}
+
+	@Test
+	void nullIgnoredDamageTypesMeansTheDefault(@TempDir Path dir) throws IOException {
+		Path file = dir.resolve("damageblockswap.json");
+		Files.writeString(file, "{\"configVersion\": 2, \"ignoredDamageTypes\": null, \"cooldownTicks\": -5}");
+
+		Config.loadFrom(file);
+
+		assertEquals(List.of("#damageblockswap:ignored"), Config.ignoredDamageTypes);
+		assertEquals(0, Config.cooldownTicks); // negative values are clamped
+	}
+
+	@Test
+	void ignoredDamageTypesAreNormalized(@TempDir Path dir) throws IOException {
+		Path file = dir.resolve("damageblockswap.json");
+		Files.writeString(file, "{\"configVersion\": 2, \"ignoredDamageTypes\": [\" Fall \", \"#IS_FIRE\", \"fall\"]}");
+
+		Config.loadFrom(file);
+
+		assertEquals(List.of("minecraft:fall", "#minecraft:is_fire"), Config.ignoredDamageTypes);
 	}
 }

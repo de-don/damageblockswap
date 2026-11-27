@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+- Safe rules: new rules never pick blocks in the block tag `damageblockswap:never_swap` (bedrock,
+  portals and end portal frames, barriers, light, fire, command/structure blocks, infested blocks,
+  doors, beds, tall plants and other two-block blocks, ...). Datapacks can change the tag.
+- `blacklist` accepts block tags (`#minecraft:logs`); unknown ids and tags are logged at startup.
+- Swapped blocks keep their shared properties (log axis, stair facing, waterlogging, ...) instead
+  of being reset to the default state; leaves are placed persistent and no longer decay.
+  This also applies to rules made before the update.
+- Default `cooldownTicks` is now 20. Configs that still have the old default 0 are raised to 20 once.
+- New `ignoredDamageTypes` setting: drowning, starving, suffocation, cramming, burning, freezing,
+  the void, the world border and `/kill` no longer cause swaps by default (tag `damageblockswap:ignored`).
+
 ## 1.1.0
 
 **Back up your world before updating. Downgrading to 1.0.x is not supported.**

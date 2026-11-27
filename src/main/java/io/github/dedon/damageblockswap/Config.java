@@ -5,13 +5,15 @@ import com.google.gson.GsonBuilder;
 
 import net.fabricmc.loader.api.FabricLoader;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.io.Reader;
 import java.io.Writer;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 
 /**
  * Simple JSON config, stored at {@code config/damageblockswap.json}.
@@ -21,13 +23,27 @@ import java.util.Locale;
  * defaults). Keeping the fields {@code static} makes them easy to read from anywhere.
  */
 public final class Config {
+	// Own logger (same name as the mod's): touching DamageBlockSwap would run its static init
+	// (attachment registration), which the unit tests can't do.
+	private static final Logger LOGGER = LoggerFactory.getLogger(DamageBlockSwap.MOD_ID);
+
+	/**
+	 * Version of the file layout. 1 (or no {@code configVersion} key): mod 1.0.x / 1.1.0.
+	 * 2: default cooldown became {@value #DEFAULT_COOLDOWN_TICKS}, {@code ignoredDamageTypes} added.
+	 */
+	static final int CONFIG_VERSION = 2;
+	static final int DEFAULT_COOLDOWN_TICKS = 20;
+	/** By default the damage types in this tag don't trigger swaps (see the tag file for the list). */
+	static final List<String> DEFAULT_IGNORED_DAMAGE_TYPES = List.of("#" + DamageBlockSwap.MOD_ID + ":ignored");
+
 	/** How many separate random swaps happen per hit. Clamped to {@value #MIN_SWAPS}..{@value #MAX_SWAPS}. */
 	public static int swapsPerHit = 1;
 	public static boolean chatMessages = true;
 	public static boolean logging = true;
 	public static boolean enableLiquids = true;
 	public static boolean enableGravityBlocks = true;
-	public static int cooldownTicks = 0;
+	/** Minimum ticks between two swap-triggering hits of the same player. 0 = no cooldown. */
+	public static int cooldownTicks = DEFAULT_COOLDOWN_TICKS;
 	/**
 	 * When true, swaps use full block updates (neighbours react, unsupported blocks drop). Off (default)
 	 * = much faster, neighbours untouched; the placed block's own behaviour (falling, flowing) stays.
@@ -37,8 +53,13 @@ public final class Config {
 	public static boolean pickFromNearbyChunks = true;
 	/** Area of effect around the player, in chunks: where swaps apply immediately and which blocks are picked. Smaller = less lag. */
 	public static int swapRadius = 3;
-	/** Block IDs that are never swapped, e.g. {@code "minecraft:bedrock"}. Normalized on load. */
+	/**
+	 * Block ids ({@code "minecraft:bedrock"}) and block tags ({@code "#minecraft:logs"}) that are never
+	 * picked for a new swap rule. Normalized on load. Only affects new rules, never rules already made.
+	 */
 	public static List<String> blacklist = new ArrayList<>();
+	/** Damage type ids and {@code #tags} that don't trigger swaps. Normalized on load. */
+	public static List<String> ignoredDamageTypes = new ArrayList<>(DEFAULT_IGNORED_DAMAGE_TYPES);
 
 	public static final int MIN_SWAPS = 1;
 	public static final int MAX_SWAPS = 100;
@@ -52,19 +73,25 @@ public final class Config {
 
 	/**
 	 * Plain data holder that Gson serializes to/from JSON. The {@code _help*} fields are just
-	 * comments for whoever edits the file by hand (JSON has no real comment syntax).
+	 * comments for whoever edits the file by hand (JSON has no real comment syntax). A key missing
+	 * from the file keeps the value given here.
 	 */
-	private static final class Data {
+	static final class Data {
 		String _help = "Damage Block Swap config.";
+		// Missing in files written before version 2; see migrate().
+		int configVersion = 0;
 		String _help_swapsPerHit = "How many random block swaps happen each time you take damage (1-100).";
 		int swapsPerHit = 1;
-		String _help_blacklist = "Block IDs that are never swapped, e.g. [\"minecraft:bedrock\", \"minecraft:diamond_ore\"]. The \"minecraft:\" prefix is optional.";
+		String _help_blacklist = "Blocks that are never picked for a new swap, as ids or #tags, e.g. [\"minecraft:diamond_ore\", \"#minecraft:logs\"]. The \"minecraft:\" prefix is optional. Rules that already exist are not affected. A safe set (bedrock, portals, barriers, fire, doors, tall plants, ...) is always excluded through the block tag damageblockswap:never_swap, which a datapack can change.";
 		List<String> blacklist = new ArrayList<>();
 		boolean chatMessages = true;
 		boolean logging = true;
 		boolean enableLiquids = true;
 		boolean enableGravityBlocks = true;
-		int cooldownTicks = 0;
+		String _help_cooldownTicks = "Minimum ticks between two swaps caused by the same player (20 ticks = 1 second). 0 = no cooldown.";
+		int cooldownTicks = DEFAULT_COOLDOWN_TICKS;
+		String _help_ignoredDamageTypes = "Damage types that do NOT cause a swap, as ids or #tags, e.g. [\"minecraft:fall\", \"#minecraft:is_fire\"]. The default tag #damageblockswap:ignored holds drowning, starving, suffocation, cramming, burning, freezing, the void, the world border and /kill. Use [] to let every damage type cause swaps.";
+		List<String> ignoredDamageTypes = new ArrayList<>(DEFAULT_IGNORED_DAMAGE_TYPES);
 		String _help_updateNeighbors = "Full vanilla block updates after swaps: neighbouring blocks react (redstone, connections, unsupported blocks break and drop). WARNING: with many/common blocks this can cause severe multi-second lag. Leave off unless you know you want it. Even when off, swapped-in sand/gravel still falls and swapped-in water/lava still flows.";
 		boolean updateNeighbors = false;
 		String _help_pickFromNearbyChunks = "Choose the swapped blocks from ones that actually exist near the player, so hits are always visible.";
@@ -73,10 +100,21 @@ public final class Config {
 		int swapRadius = 3;
 	}
 
-	public static void load() {
-		Path path = FabricLoader.getInstance().getConfigDir().resolve(DamageBlockSwap.MOD_ID + ".json");
-		Gson gson = new GsonBuilder().setPrettyPrinting().create();
+	private static Path path() {
+		return FabricLoader.getInstance().getConfigDir().resolve(DamageBlockSwap.MOD_ID + ".json");
+	}
 
+	private static Gson gson() {
+		return new GsonBuilder().setPrettyPrinting().create();
+	}
+
+	public static void load() {
+		loadFrom(path());
+	}
+
+	/** Reads the file (if any), applies it, and writes it back normalized. Package-private for tests. */
+	static void loadFrom(Path path) {
+		Gson gson = gson();
 		Data data = new Data();
 		try {
 			if (Files.exists(path)) {
@@ -86,16 +124,41 @@ public final class Config {
 						data = loaded;
 					}
 				}
+			} else {
+				data.configVersion = CONFIG_VERSION; // a fresh file has nothing to migrate
 			}
 
-			apply(data);
+			apply(migrate(data));
 			// Always write back: creates the file on first run and adds any newly introduced
 			// keys to an older config, while preserving the values we just read.
 			save(gson, path);
 		} catch (Exception e) {
-			DamageBlockSwap.LOGGER.warn("Failed to load config, using defaults", e);
-			apply(new Data());
+			LOGGER.warn("Failed to load config, using defaults", e);
+			Data defaults = new Data();
+			defaults.configVersion = CONFIG_VERSION;
+			apply(defaults);
 		}
+	}
+
+	/**
+	 * Brings a file written by an older version up to {@link #CONFIG_VERSION}.
+	 *
+	 * <p>Version 1 -> 2: the old default cooldown was 0, and the old mod wrote every key into the file,
+	 * so a 0 there almost always means "never changed". A cooldown of 0 lets a damage loop (a rule
+	 * that creates lava or cactus around the player) add a rule every few ticks, so 0 becomes the new
+	 * default once. Any other value was chosen by someone and is kept. Setting 0 again afterwards
+	 * sticks: the file then says version 2.
+	 */
+	static Data migrate(Data data) {
+		if (data.configVersion < 2) {
+			if (data.cooldownTicks == 0) {
+				data.cooldownTicks = DEFAULT_COOLDOWN_TICKS;
+				LOGGER.info("Config: cooldownTicks raised from 0 (the old default) to {} ticks. Set it back to 0"
+						+ " in config/{}.json if you really want no cooldown.", DEFAULT_COOLDOWN_TICKS, DamageBlockSwap.MOD_ID);
+			}
+			data.configVersion = 2;
+		}
+		return data;
 	}
 
 	/**
@@ -104,15 +167,15 @@ public final class Config {
 	 */
 	public static void save() {
 		swapsPerHit = clamp(swapsPerHit, MIN_SWAPS, MAX_SWAPS);
-		blacklist = normalizeBlacklist(blacklist);
+		cooldownTicks = Math.max(0, cooldownTicks);
+		blacklist = IdFilter.normalize(blacklist);
+		ignoredDamageTypes = IdFilter.normalize(ignoredDamageTypes);
 		generation++; // the in-game screen just changed settings — invalidate config-derived caches
 
-		Path path = FabricLoader.getInstance().getConfigDir().resolve(DamageBlockSwap.MOD_ID + ".json");
-		Gson gson = new GsonBuilder().setPrettyPrinting().create();
 		try {
-			save(gson, path);
+			save(gson(), path());
 		} catch (Exception e) {
-			DamageBlockSwap.LOGGER.warn("Failed to save config", e);
+			LOGGER.warn("Failed to save config", e);
 		}
 	}
 
@@ -122,11 +185,13 @@ public final class Config {
 		logging = d.logging;
 		enableLiquids = d.enableLiquids;
 		enableGravityBlocks = d.enableGravityBlocks;
-		cooldownTicks = d.cooldownTicks;
+		cooldownTicks = Math.max(0, d.cooldownTicks);
 		updateNeighbors = d.updateNeighbors;
 		pickFromNearbyChunks = d.pickFromNearbyChunks;
 		swapRadius = clamp(d.swapRadius, 1, MAX_SWAP_RADIUS);
-		blacklist = normalizeBlacklist(d.blacklist);
+		blacklist = IdFilter.normalize(d.blacklist);
+		// An explicit "ignoredDamageTypes": null is treated like a missing key, not like [].
+		ignoredDamageTypes = IdFilter.normalize(d.ignoredDamageTypes != null ? d.ignoredDamageTypes : DEFAULT_IGNORED_DAMAGE_TYPES);
 		generation++; // settings changed — invalidate config-derived caches
 	}
 
@@ -135,6 +200,7 @@ public final class Config {
 
 		// Build the output from the (validated) current values so the written file is normalized.
 		Data out = new Data();
+		out.configVersion = CONFIG_VERSION;
 		out.swapsPerHit = swapsPerHit;
 		out.blacklist = blacklist;
 		out.chatMessages = chatMessages;
@@ -142,6 +208,7 @@ public final class Config {
 		out.enableLiquids = enableLiquids;
 		out.enableGravityBlocks = enableGravityBlocks;
 		out.cooldownTicks = cooldownTicks;
+		out.ignoredDamageTypes = ignoredDamageTypes;
 		out.updateNeighbors = updateNeighbors;
 		out.pickFromNearbyChunks = pickFromNearbyChunks;
 		out.swapRadius = swapRadius;
@@ -155,32 +222,8 @@ public final class Config {
 		return Math.max(min, Math.min(max, value));
 	}
 
-	/**
-	 * Cleans up blacklist entries so matching is forgiving: trims whitespace, lowercases,
-	 * drops blanks, and adds the {@code minecraft:} namespace when the user omitted it.
-	 */
+	/** See {@link IdFilter#normalize}; kept under the old name for the blacklist. */
 	static List<String> normalizeBlacklist(List<String> raw) {
-		List<String> result = new ArrayList<>();
-		if (raw == null) {
-			return result;
-		}
-		for (String entry : raw) {
-			if (entry == null) {
-				continue;
-			}
-			// Locale.ROOT: under e.g. a Turkish default locale "I" would lowercase to a dotless "ı"
-			// and the ID would silently stop matching.
-			String id = entry.trim().toLowerCase(Locale.ROOT);
-			if (id.isEmpty()) {
-				continue;
-			}
-			if (!id.contains(":")) {
-				id = "minecraft:" + id;
-			}
-			if (!result.contains(id)) {
-				result.add(id);
-			}
-		}
-		return result;
+		return IdFilter.normalize(raw);
 	}
 }

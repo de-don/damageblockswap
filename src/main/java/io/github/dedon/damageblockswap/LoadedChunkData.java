@@ -62,7 +62,11 @@ final class LoadedChunkData implements ChunkJob.ChunkData<Block> {
 	@Override
 	public boolean set(int section, int index, Block value) {
 		cursor.set(minX + (index & 15), minY + (section << 4) + ((index >> 8) & 15), minZ + ((index >> 4) & 15));
-		BlockState target = value.defaultBlockState();
+		// Keep the properties both blocks share (log axis, stair facing, waterlogged, ...); leaves are
+		// placed persistent so they don't decay. Applies to every rule, old ones included: the rules say
+		// which block TYPE goes where, the state is only how it is placed.
+		BlockState source = sections[section].getBlockState(index & 15, (index >> 8) & 15, (index >> 4) & 15);
+		BlockState target = SwapStates.convert(source, value);
 		// Only place the swapped block where it can actually stay. This stops fragile blocks (rails,
 		// torches, flowers, redstone, ...) from being placed without support and then popping off as
 		// dropped items.
