@@ -10,12 +10,16 @@ import net.minecraft.server.level.ServerPlayer;
 
 import java.util.Collection;
 import java.util.List;
+import java.util.function.BiConsumer;
+import java.util.function.Predicate;
+import java.util.function.Supplier;
 
 /**
  * Server side of the swap map sync: sends {@link SwapMapPayload} to every player whose client has the
  * mod, when they join and every time new rules are saved. Clients without the mod never announced the
- * channel, so {@link ServerPlayNetworking#canSend} is false for them and they get nothing (a vanilla
- * client would be disconnected by an unknown payload otherwise).
+ * channel, so {@link ServerPlayNetworking#canSend} is false for them and they get nothing. (A vanilla
+ * client would only read an unknown payload as {@code DiscardedPayload} and drop it; skipping it saves
+ * building and sending a packet nobody reads.)
  *
  * <p>Only rules that are on disk are sent (as announced in chat and applied to chunks), never ones
  * still waiting for a write that failed. Server thread only.
@@ -25,8 +29,8 @@ final class SwapMapSync {
 	}
 
 	static void register() {
-		// Registered on both sides (this runs in the common initializer), so a client with the mod
-		// announces that it can receive it.
+		// Gives the server the codec for the packet. The client announces the channel itself, by
+		// registering its receiver (ClientSwapMap); that is what makes canSend true for it.
 		PayloadTypeRegistry.clientboundPlay().register(SwapMapPayload.TYPE, SwapMapPayload.CODEC);
 		// JOIN fires once the play phase is ready; the client's channels are known by then.
 		ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> sendTo(List.of(handler.player)));
@@ -38,15 +42,27 @@ final class SwapMapSync {
 	}
 
 	private static void sendTo(Collection<ServerPlayer> players) {
-		SwapMapPayload payload = null; // built once, and only if someone can receive it
-		for (ServerPlayer player : players) {
-			if (!ServerPlayNetworking.canSend(player, SwapMapPayload.TYPE)) {
+		sendTo(players, player -> ServerPlayNetworking.canSend(player, SwapMapPayload.TYPE),
+				() -> SwapMapPayload.of(SwapTracker.savedChanges(), BuiltInRegistries.BLOCK::getId),
+				ServerPlayNetworking::send);
+	}
+
+	/**
+	 * Sends the payload to the players that {@code canReceive}; builds it at most once, and not at all
+	 * if nobody can receive it. Separate from the Fabric calls so that the {@code canSend} check is
+	 * unit-tested ({@code SwapMapSyncTest}).
+	 */
+	static <P> void sendTo(Collection<P> players, Predicate<P> canReceive, Supplier<SwapMapPayload> build,
+			BiConsumer<P, SwapMapPayload> send) {
+		SwapMapPayload payload = null;
+		for (P player : players) {
+			if (!canReceive.test(player)) {
 				continue;
 			}
 			if (payload == null) {
-				payload = SwapMapPayload.of(SwapTracker.savedChanges(), BuiltInRegistries.BLOCK::getId);
+				payload = build.get();
 			}
-			ServerPlayNetworking.send(player, payload);
+			send.accept(player, payload);
 		}
 	}
 }

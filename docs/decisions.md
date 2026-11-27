@@ -719,7 +719,8 @@ BLOCKER и MAJOR в ревью нет. Исправлены minor 1, 2, 3, 6 и 
   `ServerPlayConnectionEvents.JOIN` — это `onPlayReady(handler, sender, server)`: срабатывает, когда
   фаза play готова и каналы клиента уже известны (их объявляют на этапе configuration), так что
   `canSend` в JOIN отвечает верно. Ванильный клиент канал не объявляет → `canSend == false` → ему
-  ничего не шлётся (неизвестный custom payload его бы отключил).
+  ничего не шлётся. (Довод «неизвестный custom payload его бы отключил» был неверен, см.
+  [5b review-fix], п. 4.)
 - Клиент: `ClientPlayNetworking.registerGlobalReceiver(Type, (payload, context) -> …)` — обработчик
   вызывается в клиентском потоке; `ClientPlayConnectionEvents.INIT/DISCONNECT` есть.
 - Лимит custom payload в `ClientboundCustomPayloadPacket.MAX_PAYLOAD_SIZE` = 1 048 576 байт.
@@ -787,3 +788,49 @@ BLOCKER и MAJOR в ревью нет. Исправлены minor 1, 2, 3, 6 и 
   показывает карту сервера; что ванильный клиент заходит на сервер с модом без отключения
   (проверено только `canSend == false` у mock-игрока).
 - Что raw id совпадают на сервере с модовыми блоками (полагаемся на registry sync Fabric).
+
+---
+
+## [5b review-fix] Замечания ревью `.opus/runs/review_5b.md`
+
+BLOCKER и MAJOR в ревью нет. Из шести minor исправлены пять, один оставлен (п. 6).
+
+### Исправлено
+1. **Gametest не ловил отсутствие проверки `canSend`.** Цикл рассылки вынесен в чистый
+   `SwapMapSync.sendTo(players, canReceive, build, send)`; Fabric-вызовы (`canSend`, `send`,
+   построение payload) передаются в него из старого `sendTo(Collection<ServerPlayer>)`. Новый unit-тест
+   `SwapMapSyncTest` (3) проверяет: пакет получают только игроки с каналом (и положительный путь, и
+   отрицательный), payload строится один раз на всех и не строится вовсе, если получателей нет. Если
+   убрать проверку `canReceive`, первый и второй тест падают.
+   - **Альтернатива:** настоящий клиент с каналом в gametest — у mock-игрока нет способа объявить
+     канал без внутренних (impl) классов Fabric networking, это дорого и хрупко.
+2. **Комментарий о JOIN-обработчике в gametest.** Утверждение «JOIN-обработчик отрабатывает» ничем
+   не проверялось. Комментарий переписан: gametest проверяет только, что настоящий сервер видит
+   mock-игрока как не умеющего принимать канал и рассылка его не трогает; проверка `canSend` в нашем
+   коде — дело `SwapMapSyncTest`.
+3. **Комментарий в `SwapMapSync.register`.** Верно: канал объявляет клиент вызовом
+   `ClientPlayNetworking.registerGlobalReceiver` (`ClientSwapMap`), регистрация в
+   `PayloadTypeRegistry` даёт только кодек. Комментарий исправлен.
+4. **Довод про отключение ванильного клиента был неверен.** Проверено по исходникам MC 26.1.2:
+   `ClientboundCustomPayloadPacket.GAMEPLAY_STREAM_CODEC` для неизвестного id читает
+   `DiscardedPayload.codec(id, 1048576)` (байты пропускаются), а
+   `ClientCommonPacketListenerImpl.handleCustomPayload` при `payload instanceof DiscardedPayload`
+   ничего не делает. Проверка `canSend` остаётся: без неё сервер строил бы и слал пакет, который
+   никто не читает. Javadoc `SwapMapSync` и раздел [5b] выше исправлены.
+5. **Экран карты свапов не переводился.** Все строки экрана (не только две новые) переведены на
+   `Messages` с английским fallback: ключи `damageblockswap.screen.{empty,header,hidden,unavailable,
+   incompatible}` в `en_us.json` и `ru_ru.json`. Английский текст не изменился (константы
+   `SwapMapLines.EMPTY/UNAVAILABLE/INCOMPATIBLE` теперь берутся из fallback). Экран показывается
+   только клиенту с модом, так что ключи у него всегда есть. `MessagesTest` проверяет новые ключи
+   вместе с остальными (fallback = `en_us.json`, в `ru_ru.json` те же аргументы).
+
+### Не исправлено
+6. **Нечитаемый журнал выглядит у гостя как пустая карта.** Оставлено. Замечание верно, но это не
+   ошибка 5b: у хоста одиночной игры в режиме `UNREADABLE` экран показывает то же самое с самого
+   начала, а на сервере причина уже видна оператору (ERROR-баннер в логе, `/dbs status` —
+   «журнал не прочитан, мод выключен»). Отдельное состояние для гостя потребовало бы нового поля в
+   пакете и версии протокола 2 — новую функциональность вне плана ради редкого аварийного случая.
+   Если понадобится, это делается так: флаг «журнал недоступен» в payload и строка экрана для него.
+
+### Проверено сборкой
+- `./gradlew build --no-daemon` (unit-тесты и `runGameTest`) проходит.

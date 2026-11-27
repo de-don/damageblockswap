@@ -6,9 +6,10 @@ import net.minecraft.network.chat.MutableComponent;
 import java.util.List;
 
 /**
- * Every chat line the server sends (announcements and {@code /dbs} replies), as translation keys with
- * an English fallback. A client with the mod shows its own language from {@code lang/*.json}; a vanilla
- * client (the mod is server-side only) doesn't have the keys and shows the fallback.
+ * Every chat line the server sends (announcements and {@code /dbs} replies) and the swap map screen
+ * text, as translation keys with an English fallback. A client with the mod shows its own language from
+ * {@code lang/*.json}; a vanilla client (the mod is server-side only) doesn't have the keys and shows
+ * the fallback.
  *
  * <p>The fallbacks must match {@code en_us.json}; {@code MessagesTest} checks that, and that
  * {@code ru_ru.json} has every key with the same arguments.
@@ -76,8 +77,21 @@ final class Messages {
 	static final Msg RELOAD_FAILED = new Msg(P + "command.reload.failed",
 			"Config NOT reloaded, the current settings are kept: %s");
 
+	// --- Swap map screen and the Mod Menu tab (client with the mod, so the keys are always there) ------
+	static final Msg SCREEN_EMPTY = new Msg(P + "screen.empty", "No blocks have been swapped yet. Take some damage!");
+	static final Msg SCREEN_HEADER = new Msg(P + "screen.header", "%s block type(s) changed:");
+	static final Msg SCREEN_HIDDEN = new Msg(P + "screen.hidden",
+			"...and %s more not shown here. Use /dbs list to see them.");
+	static final Msg SCREEN_UNAVAILABLE = new Msg(P + "screen.unavailable",
+			"This server has not sent its swap map: it runs without Damage Block Swap or with a version older"
+					+ " than 1.1.0. If it has the mod, use /dbs list to see its swaps.");
+	static final Msg SCREEN_INCOMPATIBLE = new Msg(P + "screen.incompatible",
+			"This server runs a version of Damage Block Swap whose swap map this client can't read."
+					+ " Use /dbs list to see its swaps.");
+
 	/** All of the above, for the test that compares them with the language files. */
 	static final List<Msg> ALL = List.of(
+			SCREEN_EMPTY, SCREEN_HEADER, SCREEN_HIDDEN, SCREEN_UNAVAILABLE, SCREEN_INCOMPATIBLE,
 			ANNOUNCE_HURT, ANNOUNCE_ADDED, ANNOUNCE_UNDONE, ANNOUNCE_MORE,
 			LIST_EMPTY, LIST_HEADER, LIST_ENTRY, LOOKUP_UNCHANGED, LOOKUP_LOOKS_LIKE, LOOKUP_WAS,
 			STATUS_RULES, STATUS_JOURNAL, STATUS_READ_ONLY, STATUS_ACTIVE, STATUS_PAUSED, STATUS_QUEUE,

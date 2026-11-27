@@ -19,11 +19,10 @@ import java.util.Map;
  * classes, so it can be unit-tested.
  */
 public final class SwapMapLines {
-	static final String UNAVAILABLE = "This server has not sent its swap map: it runs without Damage Block"
-			+ " Swap or with a version older than 1.1.0. If it has the mod, use /dbs list to see its swaps.";
-	static final String INCOMPATIBLE = "This server runs a version of Damage Block Swap whose swap map this"
-			+ " client can't read. Use /dbs list to see its swaps.";
-	static final String EMPTY = "No blocks have been swapped yet. Take some damage!";
+	// English texts (the fallbacks of the translatable lines), for the tests.
+	static final String UNAVAILABLE = Messages.SCREEN_UNAVAILABLE.fallback();
+	static final String INCOMPATIBLE = Messages.SCREEN_INCOMPATIBLE.fallback();
+	static final String EMPTY = Messages.SCREEN_EMPTY.fallback();
 
 	/** Where the swap map screen takes its lines from. */
 	public enum Source {
@@ -63,24 +62,24 @@ public final class SwapMapLines {
 		return switch (source(hostsWorld, synced)) {
 			case LOCAL -> lines(local, local.size());
 			case SYNCED -> lines(synced.changes(), synced.total());
-			case INCOMPATIBLE -> List.of(Component.literal(INCOMPATIBLE));
-			case UNAVAILABLE -> List.of(Component.literal(UNAVAILABLE));
+			case INCOMPATIBLE -> List.of(Messages.SCREEN_INCOMPATIBLE.with());
+			case UNAVAILABLE -> List.of(Messages.SCREEN_UNAVAILABLE.with());
 		};
 	}
 
 	private static List<Component> lines(Map<Block, Block> changes, int total) {
 		if (total == 0) {
-			return List.of(Component.literal(EMPTY));
+			return List.of(Messages.SCREEN_EMPTY.with());
 		}
 		List<Component> lines = new ArrayList<>(changes.size() + 2);
-		lines.add(Component.literal(total + " block type(s) changed:"));
+		lines.add(Messages.SCREEN_HEADER.with(total));
 		changes.forEach((original, current) -> lines.add(original.getName()
 				.append(Component.literal(" → "))
 				.append(current.getName())));
 		int hidden = total - changes.size();
 		if (hidden > 0) {
 			// The packet was capped, or the server has blocks this client doesn't know.
-			lines.add(Component.literal("...and " + hidden + " more not shown here. Use /dbs list to see them."));
+			lines.add(Messages.SCREEN_HIDDEN.with(hidden));
 		}
 		return lines;
 	}

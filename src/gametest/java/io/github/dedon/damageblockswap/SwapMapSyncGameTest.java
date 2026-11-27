@@ -31,8 +31,9 @@ public class SwapMapSyncGameTest {
 		helper.assertTrue(received.compatible() && received.total() == SwapTracker.allChanges().size()
 				&& received.changes().equals(SwapTracker.allChanges()), "the map changed on the way to the client");
 
-		// A mock player has no mod on the other end: no channel, so nothing may be sent to it. Joining
-		// also runs SwapMapSync's JOIN listener for it.
+		// A mock player has no mod on the other end: no channel, so nothing may be sent to it. This only
+		// checks that a real server sees such a player as unable to receive and that the broadcast
+		// leaves it alone; that SwapMapSync skips it because of canSend is SwapMapSyncTest's job.
 		MinecraftServer server = helper.getLevel().getServer();
 		ServerPlayer player = helper.makeMockServerPlayerInLevel();
 		try {

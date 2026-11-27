@@ -33,5 +33,11 @@
 	"damageblockswap.command.undo.nothing": "There is no rule to undo.",
 
 	"damageblockswap.command.reload.done": "Config reloaded: %s blocks can be picked for new rules.",
-	"damageblockswap.command.reload.failed": "Config NOT reloaded, the current settings are kept: %s"
+	"damageblockswap.command.reload.failed": "Config NOT reloaded, the current settings are kept: %s",
+
+	"damageblockswap.screen.empty": "No blocks have been swapped yet. Take some damage!",
+	"damageblockswap.screen.header": "%s block type(s) changed:",
+	"damageblockswap.screen.hidden": "...and %s more not shown here. Use /dbs list to see them.",
+	"damageblockswap.screen.unavailable": "This server has not sent its swap map: it runs without Damage Block Swap or with a version older than 1.1.0. If it has the mod, use /dbs list to see its swaps.",
+	"damageblockswap.screen.incompatible": "This server runs a version of Damage Block Swap whose swap map this client can't read. Use /dbs list to see its swaps."
 }

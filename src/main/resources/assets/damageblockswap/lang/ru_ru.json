@@ -33,5 +33,11 @@
 	"damageblockswap.command.undo.nothing": "Нет правила для отмены.",
 
 	"damageblockswap.command.reload.done": "Конфиг перечитан: для новых правил доступно блоков: %s.",
-	"damageblockswap.command.reload.failed": "Конфиг НЕ перечитан, текущие настройки сохранены: %s"
+	"damageblockswap.command.reload.failed": "Конфиг НЕ перечитан, текущие настройки сохранены: %s",
+
+	"damageblockswap.screen.empty": "Ни один блок ещё не заменён. Получите урон!",
+	"damageblockswap.screen.header": "Изменено типов блоков: %s",
+	"damageblockswap.screen.hidden": "...и ещё %s не показано. Полный список: /dbs list.",
+	"damageblockswap.screen.unavailable": "Сервер не прислал карту замен: на нём нет Damage Block Swap или стоит версия старше 1.1.0. Если мод там есть, замены можно посмотреть через /dbs list.",
+	"damageblockswap.screen.incompatible": "На сервере стоит версия Damage Block Swap, карту замен которой этот клиент прочитать не может. Замены можно посмотреть через /dbs list."
 }
