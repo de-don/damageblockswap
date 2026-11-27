@@ -10,6 +10,14 @@ Tag `v1.1.0` is set only after plan item 5 is done (see below). Source: the fina
       the swap map to clients (client stays optional, check `canSend`), server messages through
       `translatableWithFallback` + `ru_ru.json`, pin the Loom version (not SNAPSHOT), Mod Menu/Cloth via
       `clientCompileOnly` + `localRuntime`, `gradle/actions/setup-gradle` in CI.
+- [ ] **Settings UI for ignored damage types.** Today `ignoredDamageTypes` is a plain list of ids/#tags
+      (default `#damageblockswap:ignored`: drowning, starving, suffocation, cramming, burning, freezing,
+      the void, the world border, `/kill`). Make it easy to configure in the mod's settings screen: a
+      collapsible section with one checkbox per damage type ("causes swaps" on/off), so players who want
+      swaps from drowning, hunger etc. can switch them on. Keep the config file format compatible (the list
+      stays the source of truth), list types from the live damage-type registry, and keep the datapack tag
+      working. Needs a client-side screen change in `ClothConfigScreen` and a test for the checkbox ->
+      `Config.ignoredDamageTypes` mapping.
 - [ ] **Supported Minecraft versions.** Now only `~26.1.2` (`fabric.mod.json` `depends.minecraft`,
       `gradle.properties` `minecraft_version`). Decide which versions to support, test each, declare the
       range in `fabric.mod.json`, on Modrinth/CurseForge, and match the Fabric API minimum per version.
