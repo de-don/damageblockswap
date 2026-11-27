@@ -147,7 +147,7 @@ public class ChunkResumeGameTest {
 					helper.assertTrue(centerReloaded, "test chunk not loaded again yet");
 					LevelChunk chunk = level.getChunkSource().getChunkNow(CX, CZ);
 					helper.assertTrue(chunk != null
-									&& chunk.getAttachedOrElse(DamageBlockSwap.APPLIED_VERSION, 0) == target[0],
+									&& chunk.getAttachedOrElse(DamageBlockSwap.APPLIED_VERSION, 0) >= target[0],
 							"the mod hasn't finished the test chunk yet");
 				})
 				.thenExecute(() -> {

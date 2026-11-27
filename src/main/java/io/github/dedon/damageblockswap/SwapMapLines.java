@@ -19,7 +19,7 @@ import java.util.Map;
  */
 public final class SwapMapLines {
 	static final String UNAVAILABLE = "The swap map is only available in single-player or to the player"
-			+ " hosting a LAN world. On this server, use /dbs list to see the swaps.";
+			+ " hosting a LAN world. When connected to a server, use /dbs list to see its swaps.";
 	static final String EMPTY = "No blocks have been swapped yet. Take some damage!";
 
 	private SwapMapLines() {
