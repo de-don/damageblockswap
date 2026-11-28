@@ -25,6 +25,8 @@ public class DamageBlockSwapClient implements ClientModInitializer {
 	@Override
 	public void onInitializeClient() {
 		KeyMappingHelper.registerKeyMapping(OPEN_MAP_KEY);
+		// Keeps the swap map the server sends, for the screen when playing on someone else's server.
+		ClientSwapMap.register();
 
 		ClientTickEvents.END_CLIENT_TICK.register(client -> {
 			while (OPEN_MAP_KEY.consumeClick()) {

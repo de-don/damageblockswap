@@ -156,9 +156,52 @@ public final class SwapTracker {
 		return store.journal().originalOf(current);
 	}
 
+	/** A rule of the journal, numbered from 1 as players see it. */
+	public record Rule(int number, Block a, Block b) {
+	}
+
+	/** The rule {@code /dbs undo} cancels next (see {@link SwapJournal#undoTarget()}), or null if none. */
+	public static Rule undoTarget() {
+		SwapJournal<Block> journal = store.journal();
+		int index = journal.undoTarget();
+		if (index < 0) {
+			return null;
+		}
+		SwapJournal.Entry<Block> entry = journal.entries().get(index);
+		return new Rule(index + 1, entry.a(), entry.b());
+	}
+
+	/** The journal's current id (for {@code /dbs status}). */
+	public static UUID journalId() {
+		return store.journal().id();
+	}
+
+	/** Rules that refer to blocks which don't exist (kept as no-ops). */
+	public static int placeholderCount() {
+		return store.journal().placeholderCount();
+	}
+
+	/** The journal file format this version writes. */
+	public static int fileFormat() {
+		return JournalFile.FORMAT;
+	}
+
+	/** Every changed block type (original -> current), sorted by id; includes rules not saved yet. */
 	public static Map<Block, Block> allChanges() {
+		return sortedById(store.journal().changes());
+	}
+
+	/**
+	 * Like {@link #allChanges()}, but only the rules on disk: what chunks are brought up to and what
+	 * was announced. This is what clients are sent ({@link SwapMapSync}).
+	 */
+	public static Map<Block, Block> savedChanges() {
+		return sortedById(store.journal().mapping(0, store.persistedVersion()));
+	}
+
+	private static Map<Block, Block> sortedById(Map<Block, Block> unordered) {
 		Map<Block, Block> changes = new LinkedHashMap<>();
-		store.journal().changes().entrySet().stream()
+		unordered.entrySet().stream()
 				.sorted((x, y) -> idOf(x.getKey()).compareTo(idOf(y.getKey())))
 				.forEach(e -> changes.put(e.getKey(), e.getValue()));
 		return changes;

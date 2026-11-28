@@ -14,9 +14,10 @@ import net.minecraft.network.chat.Component;
 /**
  * A read-only screen listing every block type that has changed so far ("original → now").
  *
- * <p>Built with Cloth Config's text entries so we get a nice scrollable list for free. It
- * reads {@link SwapTracker} directly, which only works where the integrated server lives in the
- * same process (single-player, LAN host); elsewhere it says so and points to {@code /dbs list}.
+ * <p>Built with Cloth Config's text entries so we get a nice scrollable list for free. Where the
+ * integrated server lives in the same process (single-player, LAN host) it reads {@link SwapTracker}
+ * directly; elsewhere it shows the copy the server sent ({@link ClientSwapMap}), or, if the server
+ * has no mod, says so and points to {@code /dbs list}.
  */
 public final class SwapMapScreen {
 
@@ -41,9 +42,9 @@ public final class SwapMapScreen {
 	 */
 	public static void addSwapEntries(ConfigCategory category, ConfigEntryBuilder entry) {
 		// Only a client that runs the world itself (single-player, LAN host) has the rule book; on a
-		// dedicated server or as a LAN guest SwapTracker is empty, see SwapMapLines.
+		// dedicated server or as a LAN guest it shows the copy the server sent, see SwapMapLines.
 		boolean hostsWorld = Minecraft.getInstance().getSingleplayerServer() != null;
-		for (Component line : SwapMapLines.of(hostsWorld, SwapTracker.allChanges())) {
+		for (Component line : SwapMapLines.of(hostsWorld, SwapTracker.allChanges(), ClientSwapMap.get())) {
 			category.addEntry(entry.startTextDescription(line).build());
 		}
 	}

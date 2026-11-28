@@ -1,0 +1,43 @@
+{
+	"key.damageblockswap.swapmap": "Open Swap Map",
+
+	"damageblockswap.announce.hurt": "%s got hurt: %s ↔ %s",
+	"damageblockswap.announce.added": "%s added a rule: %s ↔ %s",
+	"damageblockswap.announce.undone": "%s undid the rule %s ↔ %s",
+	"damageblockswap.announce.more": "...and %s more new rules (see /dbs list)",
+
+	"damageblockswap.command.list.empty": "No blocks have been swapped yet.",
+	"damageblockswap.command.list.header": "Swapped block types (%s):",
+	"damageblockswap.command.list.entry": "%s → %s  [%s → %s]",
+	"damageblockswap.command.lookup.unchanged": "%s has not been swapped — it still looks the same.",
+	"damageblockswap.command.lookup.looks_like": "%s now looks like %s — look for that to find it.",
+	"damageblockswap.command.lookup.was": "Blocks that now look like %s were originally %s.",
+
+	"damageblockswap.command.status.rules": "Rules: %s (%s saved to disk, %s placeholders for missing blocks)",
+	"damageblockswap.command.status.journal": "Journal: id %s, file format %s",
+	"damageblockswap.command.status.read_only": "The swap journal could not be read: the mod is off for this world (see the server log).",
+	"damageblockswap.command.status.active": "New rules from damage: on. Cooldown %s ticks, %s rule(s) per hit.",
+	"damageblockswap.command.status.paused": "New rules from damage: PAUSED until /dbs resume or the next server start.",
+	"damageblockswap.command.status.queue": "Chunks waiting to be updated: %s",
+
+	"damageblockswap.command.pause.done": "Damage no longer adds swap rules (until /dbs resume or the next server start).",
+	"damageblockswap.command.pause.already": "Already paused.",
+	"damageblockswap.command.resume.done": "Damage adds swap rules again.",
+	"damageblockswap.command.resume.already": "Not paused.",
+
+	"damageblockswap.command.read_only": "The swap journal is read-only for this world (see the server log); no rules can be added.",
+	"damageblockswap.command.add.done": "Rule #%s recorded: %s ↔ %s. It takes effect once it is saved to the journal, normally at the end of this tick.",
+	"damageblockswap.command.add.same": "Pick two different blocks.",
+	"damageblockswap.command.add.unsafe": "%s can't be swapped: it is air, keeps data in a block entity, is a two-block block or is in #damageblockswap:never_swap.",
+	"damageblockswap.command.undo.done": "Rule #%s (%s ↔ %s) undone by adding it again as rule #%s.",
+	"damageblockswap.command.undo.nothing": "There is no rule to undo.",
+
+	"damageblockswap.command.reload.done": "Config reloaded: %s blocks can be picked for new rules.",
+	"damageblockswap.command.reload.failed": "Config NOT reloaded, the current settings are kept: %s",
+
+	"damageblockswap.screen.empty": "No blocks have been swapped yet. Take some damage!",
+	"damageblockswap.screen.header": "%s block type(s) changed:",
+	"damageblockswap.screen.hidden": "...and %s more not shown here. Use /dbs list to see them.",
+	"damageblockswap.screen.unavailable": "This server has not sent its swap map: it runs without Damage Block Swap or with a version older than 1.1.0. If it has the mod, use /dbs list to see its swaps.",
+	"damageblockswap.screen.incompatible": "This server runs a version of Damage Block Swap whose swap map this client can't read. Use /dbs list to see its swaps."
+}

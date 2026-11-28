@@ -15,6 +15,7 @@ import com.mojang.serialization.Codec;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.UUIDUtil;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
@@ -84,17 +85,25 @@ public class DamageBlockSwap implements ModInitializer {
 	private final Map<UUID, Integer> lastSwapTick = new HashMap<>();
 
 	/**
-	 * A hit that added rules; announced to everyone (and applied around every player) once the rules
-	 * are on disk. Keeps the player's name, not the player: a hit whose write failed may only be
-	 * announced after a retry, by when the player may have left.
+	 * A hit (or a /dbs add or undo) that added rules; announced to everyone (and applied around every
+	 * player) once the rules are on disk. Keeps the name, not the player: a hit whose write failed may
+	 * only be announced after a retry, by when the player may have left.
 	 */
-	private record PendingHit(Component playerName, List<RandomSwapService.BlockPair> pairs) {
+	private record PendingHit(Component playerName, List<RandomSwapService.BlockPair> pairs,
+	                          SwapAnnouncement.Cause cause) {
 	}
 
 	// Hits of the current tick. Their rules are written once, together, at the end of the tick.
 	private final List<PendingHit> pendingHits = new ArrayList<>();
-	// Hits whose rules could not be written yet; announced once a retry writes them.
-	private final List<PendingHit> unsavedHits = new ArrayList<>();
+	// At most this many rule lines are announced per write; the rest get one "...and N more" line.
+	// Matters after a long write failure, when every hit since is announced at once.
+	static final int MAX_ANNOUNCED_RULES = 20;
+	// Hits whose rules are not written yet; announced once a write (or a retry) succeeds. Bounded.
+	private final AnnouncementBacklog<PendingHit> unsavedHits = new AnnouncementBacklog<>(MAX_ANNOUNCED_RULES);
+
+	// /dbs pause: damage adds no rules. Not saved anywhere: every server start (and every world in
+	// single player) begins unpaused, see docs/decisions.md. Server thread only.
+	private boolean paused = false;
 
 	// The rule book is written at the end of every tick in which hits added rules. If that write
 	// failed, it is retried this often (in ticks); until then the new rules are not applied anywhere.
@@ -109,6 +118,8 @@ public class DamageBlockSwap implements ModInitializer {
 		// rules are on disk before the chunk pump of the same tick may apply them.
 		ServerTickEvents.END_SERVER_TICK.register(this::saveNewRules);
 		worldSwapService.registerEvents(); // catches chunks up to the rule book, a little each tick
+		// Sends the swap map to clients that have the mod (on join and after every save).
+		SwapMapSync.register();
 
 		// Fires AFTER a living entity has taken damage. Parameters:
 		//   entity           - who got hit
@@ -157,7 +168,7 @@ public class DamageBlockSwap implements ModInitializer {
 
 		// /damageblockswap (alias /dbs) — inspect what turned into what.
 		CommandRegistrationCallback.EVENT.register((dispatcher, registry, environment) ->
-				SwapCommand.register(dispatcher, registry));
+				SwapCommand.register(dispatcher, registry, this));
 
 		LOGGER.info("Damage Block Swap initialized.");
 	}
@@ -179,6 +190,61 @@ public class DamageBlockSwap implements ModInitializer {
 		lastSwapTick.clear();
 		pendingHits.clear();
 		unsavedHits.clear();
+		paused = false;
+	}
+
+	// --- Used by the admin commands (SwapCommand), on the server thread ----------------------------
+
+	boolean isPaused() {
+		return paused;
+	}
+
+	/** Pauses or resumes new rules from damage. Returns false if it already was in that state. */
+	boolean setPaused(boolean pause) {
+		if (paused == pause) {
+			return false;
+		}
+		paused = pause;
+		LOGGER.info("New swap rules from damage {}.", pause ? "paused" : "resumed");
+		return true;
+	}
+
+	/**
+	 * Records the rule a &lt;-&gt; b for {@code /dbs add} / {@code /dbs undo} exactly like a hit does:
+	 * written, applied around every player and announced at the end of this tick. Returns the rule's
+	 * number, or -1 if the journal is read-only. The caller checks the blocks.
+	 */
+	int addRule(Component who, Block a, Block b, SwapAnnouncement.Cause cause) {
+		if (!SwapTracker.recordSwap(a, b)) {
+			return -1;
+		}
+		pendingHits.add(new PendingHit(who, List.of(new RandomSwapService.BlockPair(a, b)), cause));
+		return SwapTracker.version();
+	}
+
+	/**
+	 * {@code /dbs reload}: re-reads the config and rebuilds what is built from it right away (so
+	 * problems in the lists are logged now). Returns null, or what was wrong with the file (then the
+	 * current settings stay).
+	 */
+	String reloadConfig(MinecraftServer server) {
+		String error = Config.reload();
+		if (error != null) {
+			return error;
+		}
+		randomSwapService.initialize();
+		damageTypeFilter.refresh(server.registryAccess());
+		return null;
+	}
+
+	/** How many blocks new random rules may pick from now. */
+	int swappableBlockCount() {
+		return randomSwapService.allowedBlocks().size();
+	}
+
+	/** Chunks waiting in the pump's queue. */
+	int chunkQueueSize() {
+		return worldSwapService.queueSize();
 	}
 
 	/**
@@ -195,13 +261,20 @@ public class DamageBlockSwap implements ModInitializer {
 			if (server.getTickCount() % SAVE_RETRY_INTERVAL_TICKS == 0 && SwapTracker.saveIfDirty()) {
 				// Rules that were stuck in memory are on disk now, so chunks may catch up to them.
 				worldSwapService.refreshAroundAllPlayers();
-				announceAll(server, unsavedHits);
-				unsavedHits.clear();
+				SwapMapSync.sendToAll(server);
+				announceAll(server, unsavedHits.drain());
 			}
 			return;
 		}
 
-		unsavedHits.addAll(pendingHits);
+		for (PendingHit hit : pendingHits) {
+			if (!unsavedHits.add(hit, hit.pairs().size()) && Config.logging) {
+				// Past the announcement cap: this hit only ends up in the "...and N more" count, so log
+				// who caused which rules now (the journal itself has no player names).
+				LOGGER.info("{} ({}) added rule(s) {}; not announced one by one (too many at once).",
+						hit.playerName().getString(), hit.cause(), describe(hit.pairs()));
+			}
+		}
 		pendingHits.clear();
 		if (!SwapTracker.flush()) {
 			return; // logged; the rules stay in memory, unapplied and unannounced, until a retry works
@@ -211,28 +284,72 @@ public class DamageBlockSwap implements ModInitializer {
 		// chunks only join the de-duplicated queue and are worked off within the usual per-tick budget,
 		// a chunk already mid-pass keeps its saved progress.
 		worldSwapService.refreshAroundAllPlayers();
-		announceAll(server, unsavedHits);
-		unsavedHits.clear();
+		// One packet per save (per tick at most), with the whole saved map.
+		SwapMapSync.sendToAll(server);
+		announceAll(server, unsavedHits.drain());
 	}
 
-	private void announceAll(MinecraftServer server, List<PendingHit> hits) {
-		for (PendingHit hit : hits) {
-			if (Config.chatMessages) {
-				for (RandomSwapService.BlockPair pair : hit.pairs()) {
+	/**
+	 * Announces a batch of written rules: one line per rule up to {@link #MAX_ANNOUNCED_RULES}, then a
+	 * single "...and N more" line, so a long write failure doesn't end in a flood of messages.
+	 */
+	private void announceAll(MinecraftServer server, AnnouncementBacklog.Batch<PendingHit> batch) {
+		int printed = 0;
+		for (PendingHit hit : batch.hits()) {
+			for (RandomSwapService.BlockPair pair : hit.pairs()) {
+				if (printed >= MAX_ANNOUNCED_RULES) {
+					break;
+				}
+				printed++;
+				if (Config.chatMessages) {
 					// To every player and the server console (broadcastSystemMessage logs it too).
 					server.getPlayerList().broadcastSystemMessage(
-							SwapAnnouncement.of(hit.playerName(), pair.a(), pair.b()), false);
+							SwapAnnouncement.of(hit.cause(), hit.playerName(), pair.a(), pair.b()), false);
 				}
 			}
 			if (Config.logging) {
 				// No queue size here: the areas are only queued later in this tick (refreshAroundAllPlayers).
-				LOGGER.info("Player {} took damage. Added {} rule(s), version now {}.",
-						hit.playerName().getString(), hit.pairs().size(), SwapTracker.version());
+				switch (hit.cause()) {
+					case HURT -> LOGGER.info("Player {} took damage. Added {} rule(s), version now {}.",
+							hit.playerName().getString(), hit.pairs().size(), SwapTracker.version());
+					case ADDED -> LOGGER.info("{} added a rule with /dbs add, version now {}.",
+							hit.playerName().getString(), SwapTracker.version());
+					case UNDONE -> LOGGER.info("{} undid a rule with /dbs undo, version now {}.",
+							hit.playerName().getString(), SwapTracker.version());
+				}
+			}
+		}
+		int cut = batch.unlisted(MAX_ANNOUNCED_RULES);
+		if (cut > 0) {
+			if (Config.chatMessages) {
+				server.getPlayerList().broadcastSystemMessage(SwapAnnouncement.more(cut), false);
+			}
+			if (Config.logging && batch.omittedHits() > 0) {
+				// The cap applies to any batch (many hits in one tick, or a backlog after a failed write).
+				LOGGER.info("{} more hit(s) added {} rule(s), version now {}; each was logged when it was recorded.",
+						batch.omittedHits(), batch.omittedRules(), SwapTracker.version());
 			}
 		}
 	}
 
-	private void onEntityDamaged(LivingEntity entity, DamageSource source,
+	private static String describe(List<RandomSwapService.BlockPair> pairs) {
+		StringBuilder out = new StringBuilder();
+		for (RandomSwapService.BlockPair pair : pairs) {
+			if (!out.isEmpty()) {
+				out.append(", ");
+			}
+			out.append(BuiltInRegistries.BLOCK.getKey(pair.a())).append(" <-> ").append(BuiltInRegistries.BLOCK.getKey(pair.b()));
+		}
+		return out.toString();
+	}
+
+	/** Whether {@code player}'s cooldown is running (a hit of theirs added a rule). For gametests. */
+	boolean hasCooldownEntry(UUID player) {
+		return lastSwapTick.containsKey(player);
+	}
+
+	// Package-private for AdminCommandsGameTest (pause); registered as AFTER_DAMAGE in onInitialize.
+	void onEntityDamaged(LivingEntity entity, DamageSource source,
 	                             float baseDamageTaken, float damageTaken, boolean blocked) {
 		// Only react to players who genuinely took damage.
 		if (!(entity instanceof Player player)) return;
@@ -246,6 +363,8 @@ public class DamageBlockSwap implements ModInitializer {
 		if (!(entity.level() instanceof ServerLevel serverLevel)) return;
 		// The journal file is unreadable (logged loudly at load): the mod is off for this session.
 		if (!SwapTracker.canRecord()) return;
+		// /dbs pause: checked before the cooldown, so pausing doesn't use it up.
+		if (paused) return;
 
 		MinecraftServer server = serverLevel.getServer();
 
@@ -288,6 +407,6 @@ public class DamageBlockSwap implements ModInitializer {
 
 		// Written, then announced to everyone and applied around every player, at the end of this tick
 		// (saveNewRules). Several hits in one tick share one write and one refresh.
-		pendingHits.add(new PendingHit(player.getDisplayName(), added));
+		pendingHits.add(new PendingHit(player.getDisplayName(), added, SwapAnnouncement.Cause.HURT));
 	}
 }
