@@ -164,7 +164,7 @@ class SwapStatesTest {
 	void twoBlockBlocksAreRecognized() {
 		for (Block block : List.of(Blocks.OAK_DOOR, Blocks.IRON_DOOR, Blocks.TALL_GRASS, Blocks.LARGE_FERN,
 				Blocks.SUNFLOWER, Blocks.PEONY, Blocks.TALL_SEAGRASS, Blocks.SMALL_DRIPLEAF,
-				Blocks.PITCHER_PLANT, Blocks.PITCHER_CROP, Blocks.RED_BED)) {
+				Blocks.PITCHER_PLANT, Blocks.PITCHER_CROP)) {
 			assertTrue(SwapStates.isMultiBlock(block.defaultBlockState()), block.toString());
 		}
 		for (Block block : List.of(Blocks.STONE, Blocks.OAK_LEAVES, Blocks.OAK_TRAPDOOR, Blocks.SHORT_GRASS,

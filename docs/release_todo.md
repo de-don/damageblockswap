@@ -19,9 +19,12 @@ Tag `v1.1.0` is set only after plan item 5 is done (see below). Source: the fina
       stays the source of truth), list types from the live damage-type registry, and keep the datapack tag
       working. Needs a client-side screen change in `ClothConfigScreen` and a test for the checkbox ->
       `Config.ignoredDamageTypes` mapping.
-- [ ] **Supported Minecraft versions.** Now only `~26.1.2` (`fabric.mod.json` `depends.minecraft`,
-      `gradle.properties` `minecraft_version`). Decide which versions to support, test each, declare the
-      range in `fabric.mod.json`, on Modrinth/CurseForge, and match the Fabric API minimum per version.
+- [x] **Supported Minecraft versions:** 26.1, 26.1.1, 26.1.2, 26.2, 26.3 (26.x only, older is out of scope),
+      declared in `fabric.mod.json`, checked by the CI matrix (build + unit tests + gametests on each).
+      Known limit: the client-only code (screens, key binding) is compile-checked on every version but
+      not run in CI; the only API difference found (`setScreen` moved to `Minecraft.gui` in 26.2) is
+      handled by `ScreenOpener`. When a new Minecraft version comes out: add it to the CI matrix, fix what
+      breaks, then add it to `depends.minecraft`.
 - [ ] **Version and CHANGELOG.** `mod_version` stays `1.1.0`. All changes (items 1-5) live in the single
       `1.1.0` section; add item 5 to it and re-read the Known issues (the map sync fixes the first one).
       Keep the "back up your world, no downgrade" warning at the top.

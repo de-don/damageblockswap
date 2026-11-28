@@ -45,6 +45,7 @@ public class DamageBlockSwapClient implements ClientModInitializer {
 			}
 			return;
 		}
-		client.setScreen(SwapMapScreen.create(client.screen));
+		// The key only fires with no screen open; `Minecraft.screen` is a field in 26.1 but a method in 26.2+.
+		ScreenOpener.open(client, SwapMapScreen.create(null));
 	}
 }

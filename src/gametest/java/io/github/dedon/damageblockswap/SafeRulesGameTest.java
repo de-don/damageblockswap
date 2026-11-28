@@ -119,10 +119,11 @@ public class SafeRulesGameTest {
 				BlockState state = block.defaultBlockState();
 				helper.assertFalse(state.is(RandomSwapService.NEVER_SWAP), block + " is in never_swap but may be picked");
 				helper.assertFalse(state.is(BlockTags.LOGS), block + " is blacklisted by #minecraft:logs but may be picked");
+				helper.assertFalse(state.is(BlockTags.BEDS), block + " is a bed but may be picked");
 				helper.assertFalse(SwapStates.isMultiBlock(state), block + " is a two-block block but may be picked");
 			}
 			for (Block block : List.of(Blocks.BEDROCK, Blocks.NETHER_PORTAL, Blocks.BARRIER, Blocks.DIRT, Blocks.OAK_LOG,
-					Blocks.BIRCH_LOG, Blocks.OAK_DOOR, Blocks.WHITE_BED, Blocks.TALL_GRASS, Blocks.SUNFLOWER)) {
+					Blocks.BIRCH_LOG, Blocks.OAK_DOOR, Blocks.TALL_GRASS, Blocks.SUNFLOWER)) {
 				helper.assertFalse(allowedSet.contains(block), block + " may be picked");
 			}
 			helper.assertTrue(allowedSet.contains(Blocks.STONE) && allowedSet.contains(Blocks.GRANITE),
