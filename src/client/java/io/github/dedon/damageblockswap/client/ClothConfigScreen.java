@@ -10,6 +10,7 @@ import me.shedaniel.clothconfig2.api.ConfigCategory;
 import me.shedaniel.clothconfig2.api.ConfigEntryBuilder;
 import me.shedaniel.clothconfig2.impl.builders.SubCategoryBuilder;
 
+import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.multiplayer.ClientPacketListener;
@@ -184,7 +185,9 @@ final class ClothConfigScreen {
 			boolean shown = toggles.causesSwaps(current, id);
 			section.add(entry.startBooleanToggle(Component.literal(label(id)), shown)
 					.setDefaultValue(toggles.causesSwaps(Config.DEFAULT_IGNORED_DAMAGE_TYPES, id))
-					.setYesNoTextSupplier(swaps -> Component.literal(swaps ? "Swaps" : "No swap"))
+					.setYesNoTextSupplier(swaps -> swaps
+							? Component.literal("Swaps").withStyle(ChatFormatting.GREEN)
+							: Component.literal("No swap").withStyle(ChatFormatting.RED))
 					.setTooltip(Component.literal(id))
 					.setSaveConsumer(value -> {
 						if (value == shown) {
