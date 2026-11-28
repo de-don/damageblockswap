@@ -1,6 +1,6 @@
 # Damage Block Swap
 
-A Fabric mod for **Minecraft 26.1.2**. Every time a player takes damage, a new
+A Fabric mod for **Minecraft 26.1 - 26.3**. Every time a player takes damage, a new
 "swap rule" is created — two random block types are exchanged (e.g. *stone ↔ sand*).
 Rules pile up, and the world around you gradually descends into chaos while ordinary
 Minecraft mechanics keep working.
@@ -82,7 +82,7 @@ which journal it was swapped by, so it is never swapped twice or by the wrong ru
 
 ## Requirements
 
-- Minecraft **26.1.2**
+- Minecraft **26.1, 26.1.1, 26.1.2, 26.2 or 26.3** (one jar for all; CI builds and runs every test on each of them)
 - **Fabric Loader** ≥ 0.19.3
 - **Fabric API**
 - **Java 25**

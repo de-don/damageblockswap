@@ -26,6 +26,10 @@
   the mod) are not picked up. On a server the section says that the server's config counts.
 - README: the mod runs on the server and vanilla clients can join; the swap map needs the mod on the client.
 
+### Compatibility
+- Works on Minecraft 26.1, 26.1.1, 26.1.2, 26.2 and 26.3 with one jar. CI builds the mod and runs all
+  unit tests and gametests on each of these versions.
+
 ### Fixed
 - After the journal could not be saved for a long time, the rules are no longer announced one line
   each once it saves again (in normal play too): at most 20 lines, then one "...and N more new rules" line. Hits waiting
